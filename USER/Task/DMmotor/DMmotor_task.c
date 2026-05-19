@@ -1,15 +1,15 @@
 /**
-  ******************************************************************************
+******************************************************************************
   * @file    algorithm_task.c
   * @author  Liu JiaJun(187353224@qq.com)
   * @version V1.0.0
   * @date    2025-01-10
-  * @brief   »úÆ÷ÈËËã·¨ÈÎÎñÏß³Ì£¬´¦Àí¸´ÔÓËã·¨£¬±ÜÃâÔÚÆäËûÏß³ÌÖĞ¼ÆËãÔì³É×èÈû
+  * @brief   æœºå™¨äººç®—æ³•ä»»åŠ¡çº¿ç¨‹ï¼Œå¤„ç†å¤æ‚ç®—æ³•ï¼Œé¿å…åœ¨å…¶ä»–çº¿ç¨‹ä¸­è®¡ç®—é€ æˆé˜»å¡
   ******************************************************************************
   * @attention
   *
-  * ±¾´úÂë×ñÑ­GPLv3¿ªÔ´Ğ­Òé£¬½ö¹©Ñ§Ï°½»Á÷Ê¹ÓÃ
-  * Î´¾­Ğí¿É²»µÃÓÃÓÚÉÌÒµÓÃÍ¾
+  * æœ¬ä»£ç éµå¾ªGPLv3å¼€æºåè®®ï¼Œä»…ä¾›å­¦ä¹ äº¤æµä½¿ç”¨
+  * æœªç»è®¸å¯ä¸å¾—ç”¨äºå•†ä¸šç”¨é€”
   *
   ******************************************************************************
   */
@@ -19,15 +19,16 @@
 #include "drv_dwt.h"
 #include "PID.h"
 #include "cmd_task.h"
+#include "Auto_store.h"
 #include "msg_freertos.h"
 #include "transmission_task.h"
 #include "robot_task.h"
 
-/* -------------------------------- Ïß³Ì¼äÍ¨Ñ¶TopicsÏà¹Ø ------------------------------- */
+
+/* -------------------------------- çº¿ç¨‹é—´é€šè®¯Topicsç›¸å…³ ------------------------------- */
 
 static struct pc_cmd_arm_msg dm_receive_pc_cmd_arm_msg_data = {0};
 static subscriber_t *subscribe_cmd_pc_arm_topic;
-static int8_t pc_ctrl_process_last_state;
 static dm_arm_feedback_msg_t dm_arm_feedback_pub_msg = {0};
 static publisher_t *publish_dm_arm_feedback_topic = NULL;
 static subscriber_t *publish_dm_arm_ctrl_mode_topic = NULL;
@@ -37,33 +38,25 @@ static void DMmotor_topic_pub_init(void);
 static void DMmotor_topic_sub_init(void);
 static void DMmotor_topic_pub_push(void);
 static void DMmotor_topic_sub_pull(void);
-/* -------------------------------- Ïß³Ì¼äÍ¨Ñ¶TopicsÏà¹Ø ------------------------------- */
-/* -------------------------------- µ÷ÊÔ¼à²âÏß³ÌÏà¹Ø --------------------------------- */
-static uint32_t DMmotor_task_dwt = 0;   // ºÁÃë¼à²â
-static float DMmotor_task_dt = 0;       // Ïß³ÌÊµ¼ÊÔËĞĞÊ±¼ädt
-static float DMmotor_task_delta = 0;    // ¼à²âÏß³ÌÔËĞĞÊ±¼ä
-static float DMmotor_task_start_dt = 0; // ¼à²âÏß³Ì¿ªÊ¼Ê±¼ä
-/* -------------------------------- µ÷ÊÔ¼à²âÏß³ÌÏà¹Ø --------------------------------- */
+/* -------------------------------- çº¿ç¨‹é—´é€šè®¯Topicsç›¸å…³ ------------------------------- */
+/* -------------------------------- è°ƒè¯•ç›‘æµ‹çº¿ç¨‹ç›¸å…³ --------------------------------- */
+static uint32_t DMmotor_task_dwt = 0;   // æ¯«ç§’ç›‘æµ‹
+static float DMmotor_task_dt = 0;       // çº¿ç¨‹å®é™…è¿è¡Œæ—¶é—´dt
+static float DMmotor_task_delta = 0;    // ç›‘æµ‹çº¿ç¨‹è¿è¡Œæ—¶é—´
+static float DMmotor_task_start_dt = 0; // ç›‘æµ‹çº¿ç¨‹å¼€å§‹æ—¶é—´
+/* -------------------------------- è°ƒè¯•ç›‘æµ‹çº¿ç¨‹ç›¸å…³ --------------------------------- */
 
 
 static pid_obj_t *execute_track_movej_planner_pid;
 static pid_config_t execute_track_movej_config = INIT_PID_CONFIG(0.45, 0.0, 0.012, 0.0, 4.3, PID_Trapezoid_Intergral);
 
-static float current_angle[6] = {0.0f};        // Êµ¼ÊµÄ¹Ø½ÚÊä³ö½Ç¶È£¬Ò²ÊÇĞèÒªÂË²¨µÄÖµ
-static float dm_angles[6] = {0.0f};   // ¶ÓÁĞ¶ÁÈ¡Öµ
-static float dm_pc_motor_angles[6] = {0.0f};   // ÆÚÍû½Ç¶ÈÖµ
-static float dm_user_motor_angles[6] = {0.0f};   // ÆÚÍû½Ç¶ÈÖµ
+static float current_angle[6] = {0.0f};        // å®é™…çš„å…³èŠ‚è¾“å‡ºè§’åº¦ï¼Œä¹Ÿæ˜¯éœ€è¦æ»¤æ³¢çš„å€¼
+static float dm_angles[6] = {0.0f};   // é˜Ÿåˆ—è¯»å–å€¼
+static float dm_motor_angles[6] = {0.0f};   // æœŸæœ›è§’åº¦å€¼
 Gripper_mode_e gripper_state = Gripper_OPEN;
-//User_defined_Controller, //×Ô¶¨ÒåÄ£Ê½¿ØÖÆÆ÷
-//PC_based_Controller,    //ÉÏÎ»»ú¿ØÖÆ
+//User_defined_Controller, //è‡ªå®šä¹‰æ¨¡å¼æ§åˆ¶å™¨
+//PC_based_Controller,    //ä¸Šä½æœºæ§åˆ¶
 static Arm_mode_e arm_control_state = User_defined_Controller;
-static Arm_mode_e arm_control_last_state;
-volatile static Auto_ctrl_mode auto_ctrl_mode = AUTO_RIGHT_PLACE ;
-//AUTO_WAIT,         // 0: µÈ´ı
-//AUTO_RIGHT_PLACE,   // 1: ×ó±ß·ÅÖÃ
-//AUTO_RIGHT_GRAB,    // 2: ×ó±ß×¥È¡
-//AUTO_LEFT_PLACE,  // 3: ÓÒ±ß·ÅÖÃ
-//AUTO_LEFT_GRAB    // 4: ÓÒ±ß×¥È¡
 extern QueueHandle_t xControlQueue;
 
 
@@ -80,89 +73,6 @@ struct arm_cmd_msg arm_cmd = {
         .ctrl_mode = ARM_DISABLE,
         .last_mode = ARM_DISABLE
 };
-
-void arm_mode_pc_change_to_pc_init_process(void)
-{
-    dm_motor_enable(&hfdcan3, &motor[Motor1]);
-    vTaskDelay(300); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-    pos_ctrl(&hfdcan3, motor[Motor1].id, -dm_pc_motor_angles[0]/57.3f, 0.5f); // ·¢ËÍ¿ØÖÆÃüÁî
-    vTaskDelay(300); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-
-    dm_motor_enable(&hfdcan3, &motor[Motor2]);
-    vTaskDelay(300); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-    pos_ctrl(&hfdcan3, motor[Motor2].id, dm_pc_motor_angles[1]/57.3f, 0.5f); // ·¢ËÍ¿ØÖÆÃüÁî
-    vTaskDelay(300); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-
-
-    dm_motor_enable(&hfdcan2, &motor[Motor3]);
-    vTaskDelay(300); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-    pos_ctrl(&hfdcan2, motor[Motor3].id, dm_pc_motor_angles[2]/57.3f, 0.5f); // ·¢ËÍ¿ØÖÆÃüÁî
-    vTaskDelay(300); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-
-    dm_motor_enable(&hfdcan2, &motor[Motor4]);
-    vTaskDelay(300); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-    pos_ctrl(&hfdcan2, motor[Motor4].id, -dm_pc_motor_angles[3]/57.3f, 0.5f); // ·¢ËÍ¿ØÖÆÃüÁî
-    vTaskDelay(300); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-
-    dm_motor_enable(&hfdcan2, &motor[Motor5]);
-    vTaskDelay(300); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-    pos_ctrl(&hfdcan2, motor[Motor5].id, dm_user_motor_angles[4]/57.3f, 0.5f); // ·¢ËÍ¿ØÖÆÃüÁî
-    vTaskDelay(300); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-
-    dm_motor_enable(&hfdcan2, &motor[Motor6]);
-    vTaskDelay(300); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-    pos_ctrl(&hfdcan2, motor[Motor6].id, -dm_pc_motor_angles[5]/57.3f, 0.5f); // ·¢ËÍ¿ØÖÆÃüÁî
-    vTaskDelay(300); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-
-    dm_motor_enable(&hfdcan2, &motor[Motor7]);//²»ÓÃĞ£×¼//¿ªÊ¼·¢ËÍ¼Ğ×¦³õÊ¼»¯¿ØÖÆÖ¸Áî
-    vTaskDelay(300); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-
-    arm_cmd.ctrl_mode = ARM_ENABLE; // Ê¹ÄÜ»úĞµ±Û
-    arm_cmd.last_mode = ARM_ENABLE;
-    vTaskDelay(2000); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-}
-
-void arm_mode_pc_change_to_user_init_process(void)
-{
-    dm_motor_enable(&hfdcan3, &motor[Motor1]);
-    vTaskDelay(300); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-    pos_ctrl(&hfdcan3, motor[Motor1].id, -dm_user_motor_angles[0]/57.3f, 0.5f); // ·¢ËÍ¿ØÖÆÃüÁî
-    vTaskDelay(300); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-
-    dm_motor_enable(&hfdcan3, &motor[Motor2]);
-    vTaskDelay(300); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-    pos_ctrl(&hfdcan3, motor[Motor2].id, dm_user_motor_angles[1]/57.3f, 0.5f); // ·¢ËÍ¿ØÖÆÃüÁî
-    vTaskDelay(300); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-
-
-    dm_motor_enable(&hfdcan2, &motor[Motor3]);
-    vTaskDelay(300); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-    pos_ctrl(&hfdcan2, motor[Motor3].id, dm_user_motor_angles[2]/57.3f, 0.5f); // ·¢ËÍ¿ØÖÆÃüÁî
-    vTaskDelay(300); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-
-    dm_motor_enable(&hfdcan2, &motor[Motor4]);
-    vTaskDelay(300); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-    pos_ctrl(&hfdcan2, motor[Motor4].id, -dm_user_motor_angles[3]/57.3f, 0.5f); // ·¢ËÍ¿ØÖÆÃüÁî
-    vTaskDelay(300); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-
-    dm_motor_enable(&hfdcan2, &motor[Motor5]);
-    vTaskDelay(300); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-    pos_ctrl(&hfdcan2, motor[Motor5].id, dm_user_motor_angles[4]/57.3f, 0.5f); // ·¢ËÍ¿ØÖÆÃüÁî
-    vTaskDelay(300); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-
-    dm_motor_enable(&hfdcan2, &motor[Motor6]);
-    vTaskDelay(300); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-    pos_ctrl(&hfdcan2, motor[Motor6].id, -dm_user_motor_angles[5]/57.3f, 0.5f); // ·¢ËÍ¿ØÖÆÃüÁî
-    vTaskDelay(300); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-
-    dm_motor_enable(&hfdcan2, &motor[Motor7]);//²»ÓÃĞ£×¼//¿ªÊ¼·¢ËÍ¼Ğ×¦³õÊ¼»¯¿ØÖÆÖ¸Áî
-    vTaskDelay(300); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-
-    arm_cmd.ctrl_mode = ARM_ENABLE; // Ê¹ÄÜ»úĞµ±Û
-    arm_cmd.last_mode = ARM_ENABLE;
-    vTaskDelay(2000); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-}
-
 
 void arm_cmd_enable(void) {
     if (arm_cmd.last_mode == ARM_DISABLE && arm_cmd.ctrl_mode == ARM_ENABLE) {
@@ -195,18 +105,18 @@ void arm_cmd_disable(void) {
 
 void arm_cmd_init(void) {
     if (arm_cmd.last_mode == ARM_ENABLE && arm_cmd.ctrl_mode == ARM_INIT) {
-        pos_ctrl(&hfdcan3, motor[Motor1].id, 0, 1.2f); // ·¢ËÍ¿ØÖÆÃüÁî
-        vTaskDelay(200); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-        pos_ctrl(&hfdcan3, motor[Motor2].id, 0, 1.2f); // ·¢ËÍ¿ØÖÆÃüÁî
-        vTaskDelay(200); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
+        pos_ctrl(&hfdcan3, motor[Motor1].id, 0, 1.2f); // å‘é€æ§åˆ¶å‘½ä»¤
+        vTaskDelay(200); // å»¶æ—¶ï¼Œç­‰å¾…ç”µæœºç¨³å®š
+        pos_ctrl(&hfdcan3, motor[Motor2].id, 0, 1.2f); // å‘é€æ§åˆ¶å‘½ä»¤
+        vTaskDelay(200); // å»¶æ—¶ï¼Œç­‰å¾…ç”µæœºç¨³å®š
 
         for(int i=2;i<6;i++)
         {
             dm_motor_enable(&hfdcan2, &motor[i]);
-            pos_ctrl(&hfdcan2, motor[i].id, 0, 1.2f); // ·¢ËÍ¿ØÖÆÃüÁî
-            vTaskDelay(200); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
+            pos_ctrl(&hfdcan2, motor[i].id, 0, 1.2f); // å‘é€æ§åˆ¶å‘½ä»¤
+            vTaskDelay(200); // å»¶æ—¶ï¼Œç­‰å¾…ç”µæœºç¨³å®š
         }
-        arm_cmd.last_mode = ARM_ENABLE;  //TODO:BUGÒ»¸ö
+        arm_cmd.last_mode = ARM_DISABLE;  // ä¿®å¤ï¼šåˆå§‹åŒ–åç­‰å¾…ç”¨æˆ·ä½¿èƒ½
     }
 }
 
@@ -233,7 +143,7 @@ static subscriber_t *subscribe_movej_ref_topic;
 static movej_ref_msg_t dmmotor_subscribe_movej_ref_data;
 static uint32_t dmmotor_last_movej_seq = 0;
 
- float Kp_track = 2.7f;      // ÏÈ´ÓĞ¡Öµ¿ªÊ¼µ÷
+ float Kp_track = 2.7f;      // å…ˆä»å°å€¼å¼€å§‹è°ƒ
  float Kv_track = 0.95f;
 
 static void DMmotor_apply_movej_ref(const movej_ref_msg_t *ref)
@@ -247,16 +157,16 @@ static void DMmotor_apply_movej_ref(const movej_ref_msg_t *ref)
     float pos_cmd[6];
     float vel_cmd[6];
 
-    const float v_min_follow = 0.4f; // ÓĞÎó²îÊ±×îĞ¡×·¸ÏËÙ¶È
-    const float v_max_exec   = 6.0f;  // Ö´ĞĞ²ã×î´óËÙ¶È
-    const float pos_tol      = 0.001f; // Ô¼ 0.57 ¶È
-    /* ÎŞĞ§¹ì¼££¬²»·¢ËÍ */
+    const float v_min_follow = 0.4f; // æœ‰è¯¯å·®æ—¶æœ€å°è¿½èµ¶é€Ÿåº¦
+    const float v_max_exec   = 6.0f;  // æ‰§è¡Œå±‚æœ€å¤§é€Ÿåº¦
+    const float pos_tol      = 0.001f; // çº¦ 0.57 åº¦
+    /* æ— æ•ˆè½¨è¿¹ï¼Œä¸å‘é€ */
     if (ref == 0 || ref->valid == 0)
     {
         return;
     }
 
-    // ´ËÎªÉÏÒ»¸ömsÖÜÆÚµÄÎó²î£¬µÈ»áĞèÒªÓÅÏÈ°Ñ·´À¡Îó²î¸üĞÂ
+    // æ­¤ä¸ºä¸Šä¸€ä¸ªmså‘¨æœŸçš„è¯¯å·®ï¼Œç­‰ä¼šéœ€è¦ä¼˜å…ˆæŠŠåé¦ˆè¯¯å·®æ›´æ–°
     for (uint8_t i = 0; i < 6; i++)
     {
         pos_fdb[i] = dm_arm_feedback_pub_msg.joint[i].pos_rad;
@@ -269,7 +179,7 @@ static void DMmotor_apply_movej_ref(const movej_ref_msg_t *ref)
         pos_cmd[i] = ref->q_ref_rad[i];
     }
 
-    /* °´ÄãÔ­À´µÄ·½Ïò¶¨ÒåĞŞÕı£¬1ÖáÍ¨³£ÒªºË¶ÔÊÇ·ñĞèÒª¸ººÅ */
+    /* æŒ‰ä½ åŸæ¥çš„æ–¹å‘å®šä¹‰ä¿®æ­£ï¼Œ1è½´é€šå¸¸è¦æ ¸å¯¹æ˜¯å¦éœ€è¦è´Ÿå· */
     pos_ctrl(&hfdcan3, motor[Motor1].id, pos_cmd[0], vel_cmd[0]);
     pos_ctrl(&hfdcan3, motor[Motor2].id,  pos_cmd[1], vel_cmd[1]);
     pos_ctrl(&hfdcan2, motor[Motor3].id,  pos_cmd[2], vel_cmd[2]);
@@ -278,25 +188,25 @@ static void DMmotor_apply_movej_ref(const movej_ref_msg_t *ref)
     pos_ctrl(&hfdcan2, motor[Motor6].id, pos_cmd[5], vel_cmd[5]);
 }
 
-/* Ã¿¸ö¹Ø½ÚÒ»¸ö½Ç¶ÈÖĞÖµÂË²¨Æ÷ */
+/* æ¯ä¸ªå…³èŠ‚ä¸€ä¸ªè§’åº¦ä¸­å€¼æ»¤æ³¢å™¨ */
 static median_filter5_t read_joint_pos_filter[6] = {0};
-// ËÀÇø´¦Àíº¯Êı
+// æ­»åŒºå¤„ç†å‡½æ•°
 static inline float joint_deadband_apply(float x, float threshold)
 {
     return (fabsf(x) <= threshold) ? 0.0f : x;
 }
 
-/* ¶Ô 5 ¸öÊı×öÖĞÖµÂË²¨£ºÅÅĞòºóÈ¡ÖĞ¼äÖµ */
+/* å¯¹ 5 ä¸ªæ•°åšä¸­å€¼æ»¤æ³¢ï¼šæ’åºåå–ä¸­é—´å€¼ */
 static float median5_calc(const float in[MEDIAN_WIN_SIZE])
 {
     float tmp[MEDIAN_WIN_SIZE];
     uint8_t i, j;
     float key;
-    /* ¿½±´Ò»·İ£¬±ÜÃâ¸ÄÔ­Êı¾İ */
+    /* æ‹·è´ä¸€ä»½ï¼Œé¿å…æ”¹åŸæ•°æ® */
     for (i = 0; i < MEDIAN_WIN_SIZE; i++) {
         tmp[i] = in[i];
     }
-    /* ²åÈëÅÅĞò */
+    /* æ’å…¥æ’åº */
     for (i = 1; i < MEDIAN_WIN_SIZE; i++) {
         key = tmp[i];
         j = i;
@@ -306,14 +216,14 @@ static float median5_calc(const float in[MEDIAN_WIN_SIZE])
         }
         tmp[j] = key;
     }
-    /* 5¸öÊıµÄÖĞÖµÏÂ±ê¾ÍÊÇ 2 */
+    /* 5ä¸ªæ•°çš„ä¸­å€¼ä¸‹æ ‡å°±æ˜¯ 2 */
     return tmp[MEDIAN_WIN_SIZE / 2u];
 }
 
 static float median_filter5_update(median_filter5_t *filter, float input)
 {
     uint8_t i;
-    /* µÚÒ»´Î½øÈëÊ±£¬ÓÃÊ×¸öÖµÌîÂú´°¿Ú£¬±ÜÃâÆô¶¯½×¶Î´°¿ÚÎ´Âú */
+    /* ç¬¬ä¸€æ¬¡è¿›å…¥æ—¶ï¼Œç”¨é¦–ä¸ªå€¼å¡«æ»¡çª—å£ï¼Œé¿å…å¯åŠ¨é˜¶æ®µçª—å£æœªæ»¡ */
     if (filter->inited == 0u) {
         for (i = 0; i < MEDIAN_WIN_SIZE; i++) {
             filter->buf[i] = input;
@@ -322,7 +232,7 @@ static float median_filter5_update(median_filter5_t *filter, float input)
         filter->inited = 1u;
         return input;
     }
-    /* »·ĞÎ¸²¸Ç */
+    /* ç¯å½¢è¦†ç›– */
     filter->buf[filter->index] = input;
     filter->index++;
     if (filter->index >= MEDIAN_WIN_SIZE) {
@@ -341,11 +251,11 @@ static inline void copy_one_joint_feedback_filtered(dm_joint_feedback_t *dst,
 
     pos_raw = src->para.pos;
     vel_raw = src->para.vel;
-    /* 1. ½Ç¶ÈÏÈ×ö 5´°¿ÚÖĞÖµÂË²¨ */
+    /* 1. è§’åº¦å…ˆåš 5çª—å£ä¸­å€¼æ»¤æ³¢ */
     pos_filtered = median_filter5_update(&read_joint_pos_filter[joint_idx], pos_raw);
-    /* 2. ÔÙ×öËÀÇø¹éÁã */
+    /* 2. å†åšæ­»åŒºå½’é›¶ */
     pos_filtered = joint_deadband_apply(pos_filtered, POS_DEADBAND_RAD);
-    /* 3. ËÙ¶ÈÖ±½Ó×öËÀÇø¹éÁã */
+    /* 3. é€Ÿåº¦ç›´æ¥åšæ­»åŒºå½’é›¶ */
     vel_raw = joint_deadband_apply(vel_raw, VEL_DEADBAND_RAD_S);
 
     dst->id        = src->para.id;
@@ -371,31 +281,28 @@ static void dm_feedback_cache_update(void)
     for (uint8_t i = 0; i < 6; i++) {
         copy_one_joint_feedback_filtered(&dm_arm_feedback_pub_msg.joint[i],
                                 &motor[joint_motor_name[i]], i);
-        dm_arm_feedback_pub_msg.update_mask |= (1u << i);  // ±íÊ¾Ã¿¸öÖÜÆÚÁù¸öµç»ú¶¼¸üĞÂ
+        dm_arm_feedback_pub_msg.update_mask |= (1u << i);  // è¡¨ç¤ºæ¯ä¸ªå‘¨æœŸå…­ä¸ªç”µæœºéƒ½æ›´æ–°
     }
     dm_arm_feedback_pub_msg.gripper_state = gripper_state;
-    arm_control_last_state = dm_arm_feedback_pub_msg.arm_control_state;
     dm_arm_feedback_pub_msg.arm_control_state = arm_control_state;
     dm_arm_feedback_pub_msg.auto_ctrl_mode = auto_ctrl_mode;
-
-
     taskEXIT_CRITICAL();
 }
 
 float joint_pos[6] = {0};
 float joint_vel[6] = {0};
 
-/* -------------------------------- Ïß³ÌÈë¿Ú ------------------------------- */
+/* -------------------------------- çº¿ç¨‹å…¥å£ ------------------------------- */
 void DMmotorTask_Entry(void const * argument)
 {
-/* -------------------------------- ÍâÉè³õÊ¼»¯¶ÎÂä ------------------------------- */
-    /** ´ËÈÎÎñÏß³ÌÎª»úĞµ±ÛÔË¶¯Ñ§Äæ½âËãµÄÖ´ĞĞ²ã **/
-    /** º¬ÒåÊÇ£ºalgorithmÏß³ÌÍê³ÉFK IK½âËã²¢ÇÒÊµÊ±Íê³ÉÊ±¼äÍ¬²½¹æ»®Æ÷ÔËËã£¬ÒÔ¼°¹Ø½Ú¹ì¼£¹æ»®Æ÷ÔËËã£¬·¢ËÍÄ¿±êÔË¶¯½Ç¶ÈºÍÔË¶¯ËÙ¶Èµ½´ËdmmotorÏß³Ì¿ªÊ¼Ä¿±êÖ´ĞĞ **/
-    /** ÎªÁË±ÜÃâÖ´ĞĞÆ÷ºÍ¹æ»®Æ÷µÄµ÷¶ÈÎó²î£¬ĞèÒªÔÚÖ´ĞĞÆ÷²ã¸øËÙ¶ÈºÍ½Ç¶ÈÌí¼ÓÎó²î¸ú×ÙPID **/
+    /* -------------------------------- å¤–è®¾åˆå§‹åŒ–æ®µè½ ------------------------------- */
+    /** æ­¤ä»»åŠ¡çº¿ç¨‹ä¸ºæœºæ¢°è‡‚è¿åŠ¨å­¦é€†è§£ç®—çš„æ‰§è¡Œå±‚ **/
+    /** å«ä¹‰æ˜¯ï¼šalgorithmçº¿ç¨‹å®ŒæˆFK IKè§£ç®—å¹¶ä¸”å®æ—¶å®Œæˆæ—¶é—´åŒæ­¥è§„åˆ’å™¨è¿ç®—ï¼Œä»¥åŠå…³èŠ‚è½¨è¿¹è§„åˆ’å™¨è¿ç®—ï¼Œå‘é€ç›®æ ‡è¿åŠ¨è§’åº¦å’Œè¿åŠ¨é€Ÿåº¦åˆ°æ­¤dmmotorçº¿ç¨‹å¼€å§‹ç›®æ ‡æ‰§è¡Œ **/
+    /** ä¸ºäº†é¿å…æ‰§è¡Œå™¨å’Œè§„åˆ’å™¨çš„è°ƒåº¦è¯¯å·®ï¼Œéœ€è¦åœ¨æ‰§è¡Œå™¨å±‚ç»™é€Ÿåº¦å’Œè§’åº¦æ·»åŠ è¯¯å·®è·Ÿè¸ªPID **/
     // execute_track_movej_planner_pid = pid_register(&execute_track_movej_config);
-    /* ------------------------ ¹æ»®Æ÷ÓëÖ´ĞĞÆ÷·Ö¸îÏß --------------------------------- */
+    /* ------------------------ è§„åˆ’å™¨ä¸æ‰§è¡Œå™¨åˆ†å‰²çº¿ --------------------------------- */
 
-/* -------------------------------- ÍâÉè³õÊ¼»¯¶ÎÂä ------------------------------- */
+    /* -------------------------------- å¤–è®¾åˆå§‹åŒ–æ®µè½ ------------------------------- */
     for (int i = 0; i < 6; i++) {
         motor_controls[i].current_angle_rad = 0.0f;
         motor_controls[i].last_angle_rad = 0.0f;
@@ -404,97 +311,98 @@ void DMmotorTask_Entry(void const * argument)
     }
 
     dm_motor_enable(&hfdcan3, &motor[Motor1]);
-    vTaskDelay(200); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-    pos_ctrl(&hfdcan3, motor[Motor1].id, 0, 1.0f); // ·¢ËÍ¿ØÖÆÃüÁî
-    vTaskDelay(200); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
+    vTaskDelay(200); // å»¶æ—¶ï¼Œç­‰å¾…ç”µæœºç¨³å®š
+    pos_ctrl(&hfdcan3, motor[Motor1].id, 0, 1.0f); // å‘é€æ§åˆ¶å‘½ä»¤
+    vTaskDelay(200); // å»¶æ—¶ï¼Œç­‰å¾…ç”µæœºç¨³å®š
 
     dm_motor_enable(&hfdcan3, &motor[Motor2]);
-    vTaskDelay(200); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-    pos_ctrl(&hfdcan3, motor[Motor2].id, 0, 1.0f); // ·¢ËÍ¿ØÖÆÃüÁî
-    vTaskDelay(200); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
+    vTaskDelay(200); // å»¶æ—¶ï¼Œç­‰å¾…ç”µæœºç¨³å®š
+    pos_ctrl(&hfdcan3, motor[Motor2].id, 0, 1.0f); // å‘é€æ§åˆ¶å‘½ä»¤
+    vTaskDelay(200); // å»¶æ—¶ï¼Œç­‰å¾…ç”µæœºç¨³å®š
 
     for(int i=2;i<6;i++)
     {
         dm_motor_enable(&hfdcan2, &motor[i]);
-        vTaskDelay(200); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-        pos_ctrl(&hfdcan2, motor[i].id, 0, 1.0f); // ·¢ËÍ¿ØÖÆÃüÁî
-        vTaskDelay(200); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
+        vTaskDelay(200); // å»¶æ—¶ï¼Œç­‰å¾…ç”µæœºç¨³å®š
+        pos_ctrl(&hfdcan2, motor[i].id, 0, 1.0f); // å‘é€æ§åˆ¶å‘½ä»¤
+        vTaskDelay(200); // å»¶æ—¶ï¼Œç­‰å¾…ç”µæœºç¨³å®š
     }
-    vTaskDelay(200); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-    dm_motor_enable(&hfdcan2, &motor[Motor7]);//²»ÓÃĞ£×¼//¿ªÊ¼·¢ËÍ¼Ğ×¦³õÊ¼»¯¿ØÖÆÖ¸Áî
-    vTaskDelay(200); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
+    vTaskDelay(200); // å»¶æ—¶ï¼Œç­‰å¾…ç”µæœºç¨³å®š
+    dm_motor_enable(&hfdcan2, &motor[Motor7]);//ä¸ç”¨æ ¡å‡†//å¼€å§‹å‘é€å¤¹çˆªåˆå§‹åŒ–æ§åˆ¶æŒ‡ä»¤
+    vTaskDelay(200); // å»¶æ—¶ï¼Œç­‰å¾…ç”µæœºç¨³å®š
 
-    arm_cmd.ctrl_mode = ARM_ENABLE; // Ê¹ÄÜ»úĞµ±Û
+    arm_cmd.ctrl_mode = ARM_ENABLE; // ä½¿èƒ½æœºæ¢°è‡‚
     arm_cmd.last_mode = ARM_ENABLE;
-    vTaskDelay(2000); // ÑÓÊ±£¬µÈ´ıµç»úÎÈ¶¨
-/* -------------------------------- Ïß³Ì¼äTopics³õÊ¼»¯ ------------------------------- */
+    vTaskDelay(2000); // å»¶æ—¶ï¼Œç­‰å¾…ç”µæœºç¨³å®š
+    /* -------------------------------- çº¿ç¨‹é—´Topicsåˆå§‹åŒ– ------------------------------- */
     DMmotor_topic_sub_init();
     DMmotor_topic_pub_init();
-/* -------------------------------- Ïß³Ì¼äTopics³õÊ¼»¯ ------------------------------- */
-/* -------------------------------- µ÷ÊÔ¼à²âÏß³Ìµ÷¶È --------------------------------- */
+    /* -------------------------------- çº¿ç¨‹é—´Topicsåˆå§‹åŒ– ------------------------------- */
+    /* -------------------------------- è°ƒè¯•ç›‘æµ‹çº¿ç¨‹è°ƒåº¦ --------------------------------- */
     DMmotor_task_dt = dwt_get_delta(&DMmotor_task_dwt);
     DMmotor_task_start_dt = dwt_get_time_ms();
-/* -------------------------------- µ÷ÊÔ¼à²âÏß³Ìµ÷¶È --------------------------------- */
+    /* -------------------------------- è°ƒè¯•ç›‘æµ‹çº¿ç¨‹è°ƒåº¦ --------------------------------- */
     for(;;)
     {
-/* -------------------------------- µ÷ÊÔ¼à²âÏß³Ìµ÷¶È --------------------------------- */
+/* -------------------------------- è°ƒè¯•ç›‘æµ‹çº¿ç¨‹è°ƒåº¦ --------------------------------- */
         DMmotor_task_delta = dwt_get_time_ms() - DMmotor_task_start_dt;
         DMmotor_task_start_dt = dwt_get_time_ms();
         DMmotor_task_dt = dwt_get_delta(&DMmotor_task_dwt);
-/* -------------------------------- µ÷ÊÔ¼à²âÏß³Ìµ÷¶È --------------------------------- */
-/* -------------------------------- Ïß³Ì¶©ÔÄTopicsĞÅÏ¢ ------------------------------- */
-        /** ½øÈë´ËÖ´ĞĞÏß³ÌÓÅÏÈ¸üĞÂ¹Ø½Ú½ÇĞÅÏ¢²¢ÇÒ×ö½Ç¶ÈËÙ¶ÈÂË²¨´¦Àí£¬ÓÃÓÚ½ÓÏÂÀ´µÄ¹Ø½ÚĞÅÏ¢·¢²¼ **/
+/* -------------------------------- è°ƒè¯•ç›‘æµ‹çº¿ç¨‹è°ƒåº¦ --------------------------------- */
+/* -------------------------------- çº¿ç¨‹è®¢é˜…Topicsä¿¡æ¯ ------------------------------- */
+        /** è¿›å…¥æ­¤æ‰§è¡Œçº¿ç¨‹ä¼˜å…ˆæ›´æ–°å…³èŠ‚è§’ä¿¡æ¯å¹¶ä¸”åšè§’åº¦é€Ÿåº¦æ»¤æ³¢å¤„ç†ï¼Œç”¨äºæ¥ä¸‹æ¥çš„å…³èŠ‚ä¿¡æ¯å‘å¸ƒ **/
         dm_feedback_cache_update();
         DMmotor_topic_sub_pull();
-/* -------------------------------- Ïß³Ì¶©ÔÄTopicsĞÅÏ¢ ------------------------------- */
+/* -------------------------------- çº¿ç¨‹è®¢é˜…Topicsä¿¡æ¯ ------------------------------- */
 
-/* -------------------------------- Ïß³Ì´úÂë±àĞ´¶ÎÂä ------------------------------- */
+/* -------------------------------- çº¿ç¨‹ä»£ç ç¼–å†™æ®µè½ ------------------------------- */
+    if(dm_arm_feedback_pub_msg.arm_control_state == User_defined_Controller)//è‡ªå®šä¹‰æ§åˆ¶æ¨¡å¼
+    {
+        if (xQueueReceive(xControlQueue, dm_angles, 0) == pdPASS)
+        {
+            for(uint8_t i=0;i<6;i++){
+                dm_motor_angles[i] = dm_angles[i];
+            }
+            DMcontrol_motor_1(&hfdcan3, &motor_controls[Motor1], dm_motor_angles[Motor1]);
+            DMcontrol_motor_2(&hfdcan3, &motor_controls[Motor2], dm_motor_angles[Motor2]);
+            DMcontrol_motor_3(&hfdcan2, &motor_controls[Motor3], dm_motor_angles[Motor3]);
+            DMcontrol_motor_4(&hfdcan2, &motor_controls[Motor4], dm_motor_angles[Motor4]);
+            DMcontrol_motor_5(&hfdcan2, &motor_controls[Motor5], dm_motor_angles[Motor5]);
+            DMcontrol_motor_6(&hfdcan2, &motor_controls[Motor6], dm_motor_angles[Motor6]);
 
-    if (xQueueReceive(xControlQueue, dm_angles, 0) == pdPASS)
-    {
-        for(uint8_t i=0;i<6;i++)
-        {
-            dm_user_motor_angles[i] = dm_angles[i];
         }
+        DMcontrol_motor_7(&hfdcan2,dm_arm_feedback_pub_msg.gripper_state);//PCæ§åˆ¶æ¨¡å¼
     }
-    if(dm_arm_feedback_pub_msg.arm_control_state == User_defined_Controller && arm_control_last_state != dm_arm_feedback_pub_msg.arm_control_state)
+    else if(dm_arm_feedback_pub_msg.arm_control_state == PC_based_Controller)
     {
-        arm_mode_pc_change_to_user_init_process();
-    }
-    else if(dm_arm_feedback_pub_msg.arm_control_state == PC_based_Controller && arm_control_last_state != dm_arm_feedback_pub_msg.arm_control_state)
-    {
-        arm_mode_pc_change_to_pc_init_process();
-    }
-    if(dm_arm_feedback_pub_msg.arm_control_state == User_defined_Controller)//×Ô¶¨Òå¿ØÖÆÄ£Ê½
-    {
+        /* æ£€æµ‹é”®ç›˜è§¦å‘ä¿¡å· */
+        if (auto_store_kb_trigger)
+        {
+            auto_store_trigger(auto_store_kb_target);
+            auto_store_kb_trigger = 0;
+        }
 
-            DMcontrol_motor_1(&hfdcan3, &motor_controls[Motor1], dm_user_motor_angles[Motor1]);
-            DMcontrol_motor_2(&hfdcan3, &motor_controls[Motor2], dm_user_motor_angles[Motor2]);
-            DMcontrol_motor_3(&hfdcan2, &motor_controls[Motor3], dm_user_motor_angles[Motor3]);
-            DMcontrol_motor_4(&hfdcan2, &motor_controls[Motor4], dm_user_motor_angles[Motor4]);
-            DMcontrol_motor_5(&hfdcan2, &motor_controls[Motor5], dm_user_motor_angles[Motor5]);
-            DMcontrol_motor_6(&hfdcan2, &motor_controls[Motor6], dm_user_motor_angles[Motor6]);
-        DMcontrol_motor_7(&hfdcan2,dm_arm_feedback_pub_msg.gripper_state);//¼Ğ×¦¿ØÖÆ
-    }
-    else if(dm_arm_feedback_pub_msg.arm_control_state == PC_based_Controller)//PC¿ØÖÆÄ£Ê½
-    {
-        for (int i = 0; i < 6; i++)
-        {
-            dm_pc_motor_angles[i] = dm_receive_pc_cmd_arm_msg_data.joint_pos[i] * 57.3f;
+        /* å­˜å‚¨ç½å°±ä½çŠ¶æ€æœº */
+        uint8_t arm_execute = auto_store_update();
+
+        /* æœºæ¢°è‡‚åŠ¨ä½œæ‰§è¡Œ */
+        if (arm_execute) {
+            dm_motor_angles[0] = dm_receive_pc_cmd_arm_msg_data.joint_pos[0] * 57.3f;
+            dm_motor_angles[1] = dm_receive_pc_cmd_arm_msg_data.joint_pos[1] * 57.3f;
+            dm_motor_angles[2] = dm_receive_pc_cmd_arm_msg_data.joint_pos[2] * 57.3f;
+            dm_motor_angles[3] = dm_receive_pc_cmd_arm_msg_data.joint_pos[3] * 57.3f;
+            dm_motor_angles[4] = dm_receive_pc_cmd_arm_msg_data.joint_pos[4] * 57.3f;
+            dm_motor_angles[5] = dm_receive_pc_cmd_arm_msg_data.joint_pos[5] * 57.3f;
+            DMcontrol_motor_1(&hfdcan3, &motor_controls[Motor1], dm_motor_angles[Motor1]);
+            DMcontrol_motor_2(&hfdcan3, &motor_controls[Motor2], dm_motor_angles[Motor2]);
+            DMcontrol_motor_3(&hfdcan2, &motor_controls[Motor3], dm_motor_angles[Motor3]);
+            DMcontrol_motor_4(&hfdcan2, &motor_controls[Motor4], dm_motor_angles[Motor4]);
+            DMcontrol_motor_5(&hfdcan2, &motor_controls[Motor5], dm_motor_angles[Motor5]);
+            DMcontrol_motor_6(&hfdcan2, &motor_controls[Motor6], dm_motor_angles[Motor6]);
+            auto_store_complete();
         }
-        DMcontrol_motor_1(&hfdcan3, &motor_controls[Motor1], dm_pc_motor_angles[Motor1]);
-        DMcontrol_motor_2(&hfdcan3, &motor_controls[Motor2], dm_pc_motor_angles[Motor2]);
-        DMcontrol_motor_3(&hfdcan2, &motor_controls[Motor3], dm_pc_motor_angles[Motor3]);
-        DMcontrol_motor_4(&hfdcan2, &motor_controls[Motor4], dm_pc_motor_angles[Motor4]);
-        DMcontrol_motor_5(&hfdcan2, &motor_controls[Motor5], dm_pc_motor_angles[Motor5]);
-        DMcontrol_motor_6(&hfdcan2, &motor_controls[Motor6], dm_pc_motor_angles[Motor6]);
-        DMcontrol_motor_7(&hfdcan2,dm_receive_pc_cmd_arm_msg_data.gripper_ctrl);//¼Ğ×¦¿ØÖÆ
-        //ÓÃÓÚÑ­»·×¥È¡ÑİÊ¾demo//ÉÏÎ»»úÓÃµÄÊÇ6¸ö²½ÖèËùÒÔÕâÀïÊÇ6
-        if(dm_receive_pc_cmd_arm_msg_data.pc_ctrl_process_state == 6 && pc_ctrl_process_last_state != 6)//Íê³ÉµÚÒ»¸ö²½Öè
-        {
-            auto_ctrl_mode = (auto_ctrl_mode % 4) + 1;
-        }
-        pc_ctrl_process_last_state = dm_receive_pc_cmd_arm_msg_data.pc_ctrl_process_state;
+
+        DMcontrol_motor_7(&hfdcan2, dm_receive_pc_cmd_arm_msg_data.gripper_ctrl);
     }
 
 
@@ -508,20 +416,20 @@ void DMmotorTask_Entry(void const * argument)
 //                DMmotor_apply_movej_ref(&dmmotor_subscribe_movej_ref_data);
 //            }
 //        }
-//        DMcontrol_motor_7(&hfdcan2,gripper_state);//¼Ğ×¦¿ØÖÆ//Ò»¼ü¼ĞÈ¡¹¦ÄÜ
-/* -------------------------------- Ïß³Ì´úÂë±àĞ´¶ÎÂä ------------------------------- */
+//        DMcontrol_motor_7(&hfdcan2,gripper_state);//å¤¹çˆªæ§åˆ¶//ä¸€ä¸ªæŠ“å–åŠ¨ä½œ
+        /* -------------------------------- çº¿ç¨‹ä»£ç ç¼–å†™æ®µè½ ------------------------------- */
 
-/* -------------------------------- Ïß³Ì·¢²¼TopicsĞÅÏ¢ ------------------------------- */
+        /* -------------------------------- çº¿ç¨‹å‘å¸ƒTopicsä¿¡æ¯ ------------------------------- */
         DMmotor_topic_pub_push();
-/* -------------------------------- Ïß³Ì·¢²¼TopicsĞÅÏ¢ ------------------------------- */
+        /* -------------------------------- çº¿ç¨‹å‘å¸ƒTopicsä¿¡æ¯ ------------------------------- */
         vTaskDelay(1);
     }
 }
-/* -------------------------------- Ïß³Ì½áÊø ------------------------------- */
+/* -------------------------------- çº¿ç¨‹ç»“æŸ ------------------------------- */
 
-/* -------------------------------- Ïß³Ì¼äÍ¨Ñ¶TopicsÏà¹Ø ------------------------------- */
+/* -------------------------------- çº¿ç¨‹é—´é€šè®¯Topicsç›¸å…³ ------------------------------- */
 /**
- * @brief chassis Ïß³ÌÖĞËùÓĞ·¢²¼Õß³õÊ¼»¯
+ * @brief chassis çº¿ç¨‹ä¸­æ‰€æœ‰å‘å¸ƒè€…åˆå§‹åŒ–
  */
 static void DMmotor_topic_pub_init(void)
 {
@@ -530,7 +438,7 @@ static void DMmotor_topic_pub_init(void)
 }
 
 /**
- * @brief chassis Ïß³ÌÖĞËùÓĞ¶©ÔÄÕß³õÊ¼»¯
+ * @brief chassis çº¿ç¨‹ä¸­æ‰€æœ‰è®¢é˜…è€…åˆå§‹åŒ–
  */
 static void DMmotor_topic_sub_init(void)
 {
@@ -540,7 +448,7 @@ static void DMmotor_topic_sub_init(void)
 }
 
 /**
- * @brief chassis Ïß³ÌÖĞËùÓĞ·¢²¼ÕßÍÆËÍ¸üĞÂ»°Ìâ
+ * @brief chassis çº¿ç¨‹ä¸­æ‰€æœ‰å‘å¸ƒè€…æ¨é€æ›´æ–°è¯é¢˜
  */
 static void DMmotor_topic_pub_push(void)
 {
@@ -548,7 +456,7 @@ static void DMmotor_topic_pub_push(void)
 
 }
 /**
- * @brief chassis Ïß³ÌÖĞËùÓĞ¶©ÔÄÕß»ñÈ¡¸üĞÂ»°Ìâ
+ * @brief chassis çº¿ç¨‹ä¸­æ‰€æœ‰è®¢é˜…è€…è·å–æ›´æ–°è¯é¢˜
  */
 static void DMmotor_topic_sub_pull(void)
 {
@@ -556,7 +464,7 @@ static void DMmotor_topic_sub_pull(void)
     sub_get_msg(subscribe_movej_ref_topic, &dmmotor_subscribe_movej_ref_data);
     sub_get_msg(publish_dm_arm_ctrl_mode_topic, &arm_control_state);
 }
-/* -------------------------------- Ïß³Ì¼äÍ¨Ñ¶TopicsÏà¹Ø ------------------------------- */
+/* -------------------------------- çº¿ç¨‹é—´é€šè®¯Topicsç›¸å…³ ------------------------------- */
 
 float clamp_radians(float radians, float min_limit, float max_limit) {
     if (radians > max_limit) return max_limit;
@@ -565,56 +473,48 @@ float clamp_radians(float radians, float min_limit, float max_limit) {
 }
 
 void smooth_motion_1(hcan_t* hcan, motor_t* motor, float target_angle) {
-    current_angle[0] = target_angle;  // Ö±½ÓÊ¹ÓÃÄ¿±ê½Ç¶È£¬ÎŞĞè²åÖµ
-    pos_ctrl(hcan, motor->id, -current_angle[0], 5.0f);  // ·ûºÅ´¦Àí±£Áô
+    current_angle[0] = target_angle;  // ç›´æ¥ä½¿ç”¨ç›®æ ‡è§’åº¦ï¼Œæ— éœ€æ’å€¼
+    pos_ctrl(hcan, motor->id, -current_angle[0], 10.0f);  // ç¬¦å·å¤„ç†ä¿ç•™
 }
 
 void smooth_motion_2(hcan_t* hcan, motor_t* motor, float target_angle) {
-    current_angle[1] = target_angle;  // ±£Áô³İÂÖ±È×ª»»
-    pos_ctrl(hcan, motor->id, current_angle[1], 5.0f);
+    current_angle[1] = target_angle;  // ä¿ç•™é½¿è½®æ¯”è½¬æ¢
+    pos_ctrl(hcan, motor->id, current_angle[1], 10.0f);
 }
 
 void smooth_motion_3(hcan_t* hcan, motor_t* motor, float target_angle) {
     current_angle[2] = target_angle;
-    pos_ctrl(hcan, motor->id, current_angle[2], 5.0f);//ÓĞµãÆæ¹Ö
+    pos_ctrl(hcan, motor->id, current_angle[2], 10.0f);//æœ‰ç‚¹å¥‡æ€ª
 }
 
 void smooth_motion_4(hcan_t* hcan, motor_t* motor, float target_angle) {
     current_angle[3] = target_angle;
-    pos_ctrl(hcan, motor->id, -current_angle[3], 5.0f);
+    pos_ctrl(hcan, motor->id, -current_angle[3], 10.0f);
 }
 
 void smooth_motion_5(hcan_t* hcan, motor_t* motor, float target_angle) {
     current_angle[4] = target_angle;
-    pos_ctrl(hcan, motor->id, current_angle[4], 5.0f);
+    pos_ctrl(hcan, motor->id, current_angle[4], 10.0f);
 }
 
 void smooth_motion_6(hcan_t* hcan, motor_t* motor, float target_angle) {
     current_angle[5] = target_angle;
-    pos_ctrl(hcan, motor->id, -current_angle[5], 5.0f);
+    pos_ctrl(hcan, motor->id, -current_angle[5], 10.0f);
 }
 
 void smooth_motion_7(hcan_t* hcan, motor_t* motor, float target_rad,float target_torque,float target_vel,float kp,float kd) {
     mit_ctrl(hcan,motor,motor->id,target_rad, target_vel, kp, kd, target_torque);
 }
 
-
 void DMcontrol_motor_1(hcan_t* hcan, DMmotorControl* motor_control, float target_angle) {
-    if (!motor_control->calibrated)
-    {
-        if(dm_user_motor_angles[Motor1] != 0 )
-        {
-            motor_control->initial_offset_rad = DEG_TO_RAD(dm_user_motor_angles[Motor1]);
+    if (!motor_control->calibrated) {
+        if (dm_motor_angles[Motor1] == 0) {
+            motor_control->calibrated = 0;
+        }else{
+            motor_control->initial_offset_rad = DEG_TO_RAD(dm_motor_angles[Motor1]);
             motor_control->calibrated = 1;
         }
-        else if(dm_pc_motor_angles[Motor1] != 0 )
-        {
-            motor_control->initial_offset_rad = DEG_TO_RAD(dm_pc_motor_angles[Motor1]);
-            motor_control->calibrated = 1;
-        }
-    }
-    else if(motor_control->calibrated == 1)
-    {
+    }else if(motor_control->calibrated == 1) {
         motor_control->current_angle_rad = DEG_TO_RAD(target_angle);
 
         float angle = clamp_radians(motor_control->current_angle_rad,motor_control->motor_min_limit, motor_control->motor_max_limit);
@@ -624,104 +524,118 @@ void DMcontrol_motor_1(hcan_t* hcan, DMmotorControl* motor_control, float target
         motor_control->last_angle_rad = motor_control->current_angle_rad;
     }
 }
+
 void DMcontrol_motor_2(hcan_t* hcan, DMmotorControl* motor_control, float target_angle) {
     if (!motor_control->calibrated) {
-        if (dm_user_motor_angles[Motor2] != 0) {
-            motor_control->initial_offset_rad = DEG_TO_RAD(dm_user_motor_angles[Motor2]);
-            motor_control->calibrated = 1;
-        } else if (dm_pc_motor_angles[Motor2] != 0) {
-            motor_control->initial_offset_rad = DEG_TO_RAD(dm_pc_motor_angles[Motor2]);
+        if (dm_motor_angles[Motor2] == 0) {
+            motor_control->calibrated = 0;
+        }else{
+            motor_control->initial_offset_rad = DEG_TO_RAD(dm_motor_angles[Motor2]);
             motor_control->calibrated = 1;
         }
-    } else if (motor_control->calibrated == 1) {
+    }else if(motor_control->calibrated == 1){
         motor_control->current_angle_rad = DEG_TO_RAD(target_angle);
+
         float angle = clamp_radians(motor_control->current_angle_rad, motor_control->motor_min_limit, motor_control->motor_max_limit);
+
         smooth_motion_2(hcan, &motor[Motor2], angle);
+
         motor_control->last_angle_rad = motor_control->current_angle_rad;
     }
 }
 
 void DMcontrol_motor_3(hcan_t* hcan, DMmotorControl* motor_control, float target_angle) {
     if (!motor_control->calibrated) {
-        if (dm_user_motor_angles[Motor3] != 0) {
-            motor_control->initial_offset_rad = DEG_TO_RAD(dm_user_motor_angles[Motor3]);
-            motor_control->calibrated = 1;
-        } else if (dm_pc_motor_angles[Motor3] != 0) {
-            motor_control->initial_offset_rad = DEG_TO_RAD(dm_pc_motor_angles[Motor3]);
+        if (dm_motor_angles[Motor3] == 0) {
+            motor_control->calibrated = 0;
+        }else{
+            motor_control->initial_offset_rad = DEG_TO_RAD(dm_motor_angles[Motor3]);
             motor_control->calibrated = 1;
         }
-    } else if (motor_control->calibrated == 1) {
+
+    }else if(motor_control->calibrated == 1){
+
         motor_control->current_angle_rad = DEG_TO_RAD(target_angle);
+
         float angle = clamp_radians(motor_control->current_angle_rad, motor_control->motor_min_limit, motor_control->motor_max_limit);
+
         smooth_motion_3(hcan, &motor[Motor3], angle);
+
         motor_control->last_angle_rad = motor_control->current_angle_rad;
     }
 }
 
 void DMcontrol_motor_4(hcan_t* hcan, DMmotorControl* motor_control, float target_angle) {
     if (!motor_control->calibrated) {
-        if (dm_user_motor_angles[Motor4] != 0) {
-            motor_control->initial_offset_rad = DEG_TO_RAD(dm_user_motor_angles[Motor4]);
-            motor_control->calibrated = 1;
-        } else if (dm_pc_motor_angles[Motor4] != 0) {
-            motor_control->initial_offset_rad = DEG_TO_RAD(dm_pc_motor_angles[Motor4]);
+        if (dm_motor_angles[Motor4] == 0) {
+            motor_control->calibrated = 0;
+        }else{
+            motor_control->initial_offset_rad = DEG_TO_RAD(dm_motor_angles[Motor4]);
             motor_control->calibrated = 1;
         }
-    } else if (motor_control->calibrated == 1) {
+    }else if(motor_control->calibrated == 1){
         motor_control->current_angle_rad = DEG_TO_RAD(target_angle);
+
         float angle = clamp_radians(motor_control->current_angle_rad, motor_control->motor_min_limit, motor_control->motor_max_limit);
+
         smooth_motion_4(hcan, &motor[Motor4], angle);
+
         motor_control->last_angle_rad = motor_control->current_angle_rad;
     }
 }
 
 void DMcontrol_motor_5(hcan_t* hcan, DMmotorControl* motor_control, float target_angle) {
     if (!motor_control->calibrated) {
-        if (dm_user_motor_angles[Motor5] != 0) {
-            motor_control->initial_offset_rad = DEG_TO_RAD(dm_user_motor_angles[Motor5]);
-            motor_control->calibrated = 1;
-        } else if (dm_pc_motor_angles[Motor5] != 0) {
-            motor_control->initial_offset_rad = DEG_TO_RAD(dm_pc_motor_angles[Motor5]);
+        if (dm_motor_angles[Motor5] == 0) {
+            motor_control->calibrated = 0;
+        }else{
+            motor_control->initial_offset_rad = DEG_TO_RAD(dm_motor_angles[Motor5]);
             motor_control->calibrated = 1;
         }
-    } else if (motor_control->calibrated == 1) {
+    }else if(motor_control->calibrated == 1){
         motor_control->current_angle_rad = DEG_TO_RAD(target_angle);
+
         float angle = clamp_radians(motor_control->current_angle_rad, motor_control->motor_min_limit, motor_control->motor_max_limit);
+
         smooth_motion_5(hcan, &motor[Motor5], angle);
+
         motor_control->last_angle_rad = motor_control->current_angle_rad;
     }
 }
 
 void DMcontrol_motor_6(hcan_t* hcan, DMmotorControl* motor_control, float target_angle) {
     if (!motor_control->calibrated) {
-        if (dm_user_motor_angles[Motor6] != 0) {
-            motor_control->initial_offset_rad = DEG_TO_RAD(dm_user_motor_angles[Motor6]);
-            motor_control->calibrated = 1;
-        } else if (dm_pc_motor_angles[Motor6] != 0) {
-            motor_control->initial_offset_rad = DEG_TO_RAD(dm_pc_motor_angles[Motor6]);
+        if (dm_motor_angles[Motor6] == 0) {
+            motor_control->calibrated = 0;
+        }else{
+            motor_control->initial_offset_rad = DEG_TO_RAD(dm_motor_angles[Motor6]);
             motor_control->calibrated = 1;
         }
-    } else if (motor_control->calibrated == 1) {
+    }else if(motor_control->calibrated == 1){
         motor_control->current_angle_rad = DEG_TO_RAD(target_angle);
+
         float angle = clamp_radians(motor_control->current_angle_rad, motor_control->motor_min_limit, motor_control->motor_max_limit);
+
         smooth_motion_6(hcan, &motor[Motor6], angle);
+
         motor_control->last_angle_rad = motor_control->current_angle_rad;
+
     }
 }
 
 void DMcontrol_motor_7(hcan_t* hcan,Gripper_mode_e Gripper_ctrl)
 {
     float target_rad,target_torque,target_vel,target_kp,target_kd;
-    if(Gripper_ctrl == Gripper_OPEN)//Ò»¼ü×¥È¡Ä£Ê½,ÔÚÕâÀïµ÷²Î
+    if(Gripper_ctrl == Gripper_OPEN)//ä¸€é”®æŠ“å–æ¨¡å¼,åœ¨è¿™é‡Œè°ƒå‚
     {
         target_rad = 0.0f;
         target_torque = 1.5f;
         target_vel = 0.0f;
         target_kp = 0.0f;
         target_kd = 0.5f;
-        gripper_state = Gripper_OPEN;//¸Ä±ä¼Ğ×¦×´Ì¬±¨¸øÉÏÎ»»ú
+        gripper_state = Gripper_OPEN;//æ”¹å˜å¤¹çˆªçŠ¶æ€æŠ¥ç»™ä¸Šä½æœº
     }
-    else//¹Ø±Õ
+    else//å…³é—­
     {
         target_rad = 0.0f;
         target_torque = -1.5f;

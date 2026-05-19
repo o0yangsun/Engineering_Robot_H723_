@@ -1,5 +1,5 @@
 //
-// Created by Áõ¼Î¿¡ on 25-1-14.
+// Created by åˆ˜å˜‰ä¿Š on 25-1-14.
 //
 
 #ifndef CTRBOARD_H7_ALL_DMMOTOR_TASK_H
@@ -10,33 +10,33 @@
 #include "fdcan.h"
 #include "cmd_task.h"
 #include "rc_sbus.h"
-// ×ª»»ºê¶¨Òå
-#define DEG_TO_RAD(x) ((x) * (M_PI / 180.0f)) // ¶ÈÊı×ª»¡¶È
-#define RAD_TO_DEG(x) ((x) * (180.0f / M_PI)) // »¡¶È×ª¶ÈÊı
-#define NUM_INITIAL_READINGS 10 // ÉèÖÃ¶ÁÈ¡´ÎÊı
+// è½¬æ¢å®å®šä¹‰
+#define DEG_TO_RAD(x) ((x) * (M_PI / 180.0f)) // åº¦æ•°è½¬å¼§åº¦
+#define RAD_TO_DEG(x) ((x) * (180.0f / M_PI)) // å¼§åº¦è½¬åº¦æ•°
+#define NUM_INITIAL_READINGS 10 // è®¾ç½®è¯»å–æ¬¡æ•°
 
-// ÁùºÅµç»úµÄ½Ç¶ÈÏŞÖÆ
+// å…­å·ç”µæœºçš„è§’åº¦é™åˆ¶
 #define MOTOR_6_MIN_LIMIT (-3.0f)
 #define MOTOR_6_MAX_LIMIT (3.0f)
 
 
-// ÎåºÅµç»úµÄ½Ç¶ÈÏŞÖÆ
-#define MOTOR_5_MIN_LIMIT (-1.5f)  //  5ºÅµç»ú×ª¶¯ 1È¦£¬Ä©¶Ë³İÂÖ×ª¶¯ 1.5556È¦,ÏŞ·ù¾ÅÊ®¶È
+// äº”å·ç”µæœºçš„è§’åº¦é™åˆ¶
+#define MOTOR_5_MIN_LIMIT (-1.5f)  //  5å·ç”µæœºè½¬åŠ¨ 1åœˆï¼Œæœ«ç«¯é½¿è½®è½¬åŠ¨ 1.5556åœˆ,é™å¹…ä¹ååº¦
 #define MOTOR_5_MAX_LIMIT (1.5f)
 
-// ËÄºÅµç»úµÄ½Ç¶ÈÏŞÖÆ
-#define MOTOR_4_MIN_LIMIT (-3.14f)  // ×î¶à3.14
+// å››å·ç”µæœºçš„è§’åº¦é™åˆ¶
+#define MOTOR_4_MIN_LIMIT (-3.14f)  // æœ€å¤š3.14
 #define MOTOR_4_MAX_LIMIT 3.14f
 
-// ÈıºÅµç»úµÄ½Ç¶ÈÏŞÖÆ
+// ä¸‰å·ç”µæœºçš„è§’åº¦é™åˆ¶
 #define MOTOR_3_MIN_LIMIT 0.01f
-#define MOTOR_3_MAX_LIMIT 2.65f    // µãÎ»ËµÃ÷£¬2Îª¼´½«Ô½¹ıµãÎ»£¬2.6³¯Ìì£¬3.1Ô½³öµãÎ»£¬4.2·´Ïò´¹Ö±£¬4.9´¹Ö±ÎüÅÌ£¬5.2¼«ÏŞ
+#define MOTOR_3_MAX_LIMIT 2.65f    // ç‚¹ä½è¯´æ˜ï¼Œ2ä¸ºå³å°†è¶Šè¿‡ç‚¹ä½ï¼Œ2.6æœå¤©ï¼Œ3.1è¶Šå‡ºç‚¹ä½ï¼Œ4.2åå‘å‚ç›´ï¼Œ4.9å‚ç›´å¸ç›˜ï¼Œ5.2æé™
 
-// ¼ÆËã¶şºÅµç»úµÄ½Ç¶ÈÏŞÖÆ
+// è®¡ç®—äºŒå·ç”µæœºçš„è§’åº¦é™åˆ¶
 #define MOTOR_2_MIN_LIMIT (-2.1f)
 #define MOTOR_2_MAX_LIMIT (-0.01f)
 
-// ¼ÆËãÒ»ºÅµç»úµÄ½Ç¶ÈÏŞÖÆ
+// è®¡ç®—ä¸€å·ç”µæœºçš„è§’åº¦é™åˆ¶
 #define MOTOR_1_MIN_LIMIT (-2.4f)
 #define MOTOR_1_MAX_LIMIT 2.4f
 
@@ -45,13 +45,13 @@ void arm_cmd_enable(void);
 void arm_cmd_disable(void);
 
 typedef struct {
-    float motor_min_limit;       // µç»ú×îĞ¡½Ç¶ÈÏŞÖÆ
-    float motor_max_limit;       // µç»ú×î´ó½Ç¶ÈÏŞÖÆ
-    float initial_offset_rad;        // µç»úµÄ³õÊ¼Æ«²î£¨»¡¶È£©
+    float motor_min_limit;       // ç”µæœºæœ€å°è§’åº¦é™åˆ¶
+    float motor_max_limit;       // ç”µæœºæœ€å¤§è§’åº¦é™åˆ¶
+    float initial_offset_rad;        // ç”µæœºçš„åˆå§‹åå·®ï¼ˆå¼§åº¦ï¼‰
 
-    float current_angle_rad;            // µç»úµÄ³İÂÖ±È
-    float last_angle_rad;            // µç»úÉÏÒ»´ÎµÄ½Ç¶È£¨»¡¶È£©
-    int calibrated;              // Ğ£×¼×´Ì¬
+    float current_angle_rad;            // ç”µæœºçš„é½¿è½®æ¯”
+    float last_angle_rad;            // ç”µæœºä¸Šä¸€æ¬¡çš„è§’åº¦ï¼ˆå¼§åº¦ï¼‰
+    int calibrated;              // æ ¡å‡†çŠ¶æ€
 } DMmotorControl;
 
 typedef enum
@@ -66,11 +66,12 @@ struct arm_cmd_msg
     arm_mode_e ctrl_mode;
     arm_mode_e last_mode;
 };
+extern struct arm_cmd_msg arm_cmd;
 
-/** ¹Ø½Úµç»ú½Ç¶ÈËÙ¶È´¦ÀíÏà¹Øº¯Êı **/
+/** å…³èŠ‚ç”µæœºè§’åº¦é€Ÿåº¦å¤„ç†ç›¸å…³å‡½æ•° **/
 #define POS_DEADBAND_RAD        0.0002f
 #define VEL_DEADBAND_RAD_S      0.009f
-#define MEDIAN_WIN_SIZE         5u  // 5´°¿ÚÖĞÖµÂË²¨
+#define MEDIAN_WIN_SIZE         5u  // 5çª—å£ä¸­å€¼æ»¤æ³¢
 
 typedef struct
 {
@@ -79,10 +80,11 @@ typedef struct
     uint8_t inited;
 } median_filter5_t;
 
-/** ¹Ø½Úµç»ú½Ç¶ÈËÙ¶È´¦ÀíÏà¹Øº¯Êı **/
+/** å…³èŠ‚ç”µæœºè§’åº¦é€Ÿåº¦å¤„ç†ç›¸å…³å‡½æ•° **/
 
 
-// ÏŞ·ùº¯Êı
+
+// é™å¹…å‡½æ•°
 float clamp_radians(float radians, float min_limit, float max_limit);
 
 void DMcontrol_motor_1(hcan_t* hcan, DMmotorControl* motor_control, float target_angle);
@@ -98,7 +100,6 @@ void DMcontrol_motor_5(hcan_t* hcan, DMmotorControl* motor_control, float target
 void DMcontrol_motor_6(hcan_t* hcan, DMmotorControl* motor_control, float target_angle);
 
 void DMcontrol_motor_7(hcan_t* hcan,Gripper_mode_e Gripper_ctrl);
-
 
 
 #endif //CTRBOARD_H7_ALL_DMMOTOR_TASK_H
