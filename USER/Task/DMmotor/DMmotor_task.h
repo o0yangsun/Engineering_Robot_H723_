@@ -66,7 +66,6 @@ struct arm_cmd_msg
     arm_mode_e ctrl_mode;
     arm_mode_e last_mode;
 };
-extern struct arm_cmd_msg arm_cmd;
 
 /** 关节电机角度速度处理相关函数 **/
 #define POS_DEADBAND_RAD        0.0002f
@@ -81,7 +80,6 @@ typedef struct
 } median_filter5_t;
 
 /** 关节电机角度速度处理相关函数 **/
-
 
 
 // 限幅函数
@@ -100,6 +98,7 @@ void DMcontrol_motor_5(hcan_t* hcan, DMmotorControl* motor_control, float target
 void DMcontrol_motor_6(hcan_t* hcan, DMmotorControl* motor_control, float target_angle);
 
 void DMcontrol_motor_7(hcan_t* hcan,Gripper_mode_e Gripper_ctrl);
+
 
 
 #endif //CTRBOARD_H7_ALL_DMMOTOR_TASK_H

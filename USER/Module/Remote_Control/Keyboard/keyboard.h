@@ -1,5 +1,5 @@
 //
-// Created by Áõ¼Î¿¡ on 25-3-8.
+// Created by åˆ˜å˜‰ä¿Š on 25-3-8.
 //
 
 #ifndef CTRBOARD_H7_ALL_KEYBOARD_H
@@ -9,67 +9,67 @@
 #include "vt13_vt03.h"
 
 /**
-  * @brief     µ×ÅÌÔË¶¯ËÙ¶È¿ìÂıÄ£Ê½
+  * @brief     åº•ç›˜è¿åŠ¨é€Ÿåº¦å¿«æ…¢æ¨¡å¼
   */
 typedef enum
 {
-    NORMAL_MODE = 0,    //Õı³£Ä£Ê½
-    FAST_MODE,          //¿ìËÙÄ£Ê½
-    SLOW_MODE,          //ÂıËÙÄ£Ê½
+    NORMAL_MODE = 0,    //æ­£å¸¸æ¨¡å¼
+    FAST_MODE,          //å¿«é€Ÿæ¨¡å¼
+    SLOW_MODE,          //æ…¢é€Ÿæ¨¡å¼
 } key_move_e;
 
 
 /**
-  * @brief     Êó±ê°´¼ü×´Ì¬ÀàĞÍÃ¶¾Ù
+  * @brief     é¼ æ ‡æŒ‰é”®çŠ¶æ€ç±»å‹æšä¸¾
   */
 typedef enum
 {
-    KEY_RELEASE = 0,    //Ã»ÓĞ°´¼ü°´ÏÂ
-    KEY_WAIT_EFFECTIVE, //µÈ´ı°´¼ü°´ÏÂÓĞĞ§£¬·À¶¶
-    KEY_PRESS_ONCE,     //°´¼ü°´Ò»´ÎµÄ×´Ì¬
-    KEY_PRESS_DOWN,     //°´¼üÒÑ¾­±»°´ÏÂ
-    KEY_PRESS_LONG,     //°´¼ü³¤°´×´Ì¬
+    KEY_RELEASE = 0,    //æ²¡æœ‰æŒ‰é”®æŒ‰ä¸‹
+    KEY_WAIT_EFFECTIVE, //ç­‰å¾…æŒ‰é”®æŒ‰ä¸‹æœ‰æ•ˆï¼Œé˜²æŠ–
+    KEY_PRESS_ONCE,     //æŒ‰é”®æŒ‰ä¸€æ¬¡çš„çŠ¶æ€
+    KEY_PRESS_DOWN,     //æŒ‰é”®å·²ç»è¢«æŒ‰ä¸‹
+    KEY_PRESS_LONG,     //æŒ‰é”®é•¿æŒ‰çŠ¶æ€
 } key_state_e;
 
 
-// ÔÚ¼üÅÌ¿ØÖÆ½á¹¹ÌåÖĞÌí¼ÓÊ±¼ä´Á¼ÇÂ¼
+// åœ¨é”®ç›˜æ§åˆ¶ç»“æ„ä½“ä¸­æ·»åŠ æ—¶é—´æˆ³è®°å½•
 typedef struct {
     key_state_e state;
-    uint32_t press_timestamp;  // ¾«È·µ½ºÁÃëµÄ°´ÏÂÊ±¼ä
-    uint32_t long_press_time;  // ³¤°´Ê±¼äãĞÖµ£¨ms£©
-    uint32_t key_cnt;  // ¼ÆÊıÖµ£¬ÓÃÓÚÑÓÊ±¼ì²â¶Ì°´Óë³¤°´
+    uint32_t press_timestamp;  // ç²¾ç¡®åˆ°æ¯«ç§’çš„æŒ‰ä¸‹æ—¶é—´
+    uint32_t long_press_time;  // é•¿æŒ‰æ—¶é—´é˜ˆå€¼ï¼ˆmsï¼‰
+    uint32_t key_cnt;  // è®¡æ•°å€¼ï¼Œç”¨äºå»¶æ—¶æ£€æµ‹çŸ­æŒ‰ä¸é•¿æŒ‰
 } key_status_t;
 
 
 
 /**
-  * @brief     ¼üÅÌÊó±êÊı¾İ½á¹¹Ìå
+  * @brief     é”®ç›˜é¼ æ ‡æ•°æ®ç»“æ„ä½“
   */
 typedef struct
 {
-    /* ¼üÅÌÄ£Ê½Ê¹ÄÜ±êÖ¾ */
+    /* é”®ç›˜æ¨¡å¼ä½¿èƒ½æ ‡å¿— */
     uint8_t keyboard_enable;
 
-    /* Êó±ê¼üÅÌ¿ØÖÆÄ£Ê½ÏÂµÄµ×ÅÌÒÆ¶¯ËÙ¶ÈÄ¿±êÖµ */
-    float vx;          //µ×ÅÌÇ°½øºóÍËÄ¿±êËÙ¶È
-    float vy;          //µ×ÅÌ×óÓÒÆ½ÒÆÄ¿±êËÙ¶È
-    float vw;          //µ×ÅÌĞı×ªËÙ¶È
-    float max_spd;     //ÔË¶¯×î´óËÙ¶È
+    /* é¼ æ ‡é”®ç›˜æ§åˆ¶æ¨¡å¼ä¸‹çš„åº•ç›˜ç§»åŠ¨é€Ÿåº¦ç›®æ ‡å€¼ */
+    float vx;          //åº•ç›˜å‰è¿›åé€€ç›®æ ‡é€Ÿåº¦
+    float vy;          //åº•ç›˜å·¦å³å¹³ç§»ç›®æ ‡é€Ÿåº¦
+    float vw;          //åº•ç›˜æ—‹è½¬é€Ÿåº¦
+    float max_spd;     //è¿åŠ¨æœ€å¤§é€Ÿåº¦
 
-    /* ¼üÅÌ°´¼ü×´Ì¬ */
-    key_status_t e; //E¼ü°´¼ü×´Ì¬
-    key_status_t f; //F¼ü°´¼ü×´Ì¬
-    key_status_t shift; //SHIFT¼ü°´¼ü×´Ì¬
-    key_status_t ctrl; //SHIFT¼ü°´¼ü×´Ì¬
-    key_status_t v; //V¼ü°´¼ü×´Ì¬
-    key_status_t g; //G¼ü°´¼ü×´Ì¬
-    key_status_t x; //X¼ü°´¼ü×´Ì¬
-    key_status_t b; //B¼ü°´¼ü×´Ì¬
-    key_status_t z; //Z¼ü°´¼ü×´Ì¬
+    /* é”®ç›˜æŒ‰é”®çŠ¶æ€ */
+    key_status_t e; //Eé”®æŒ‰é”®çŠ¶æ€
+    key_status_t f; //Fé”®æŒ‰é”®çŠ¶æ€
+    key_status_t shift; //SHIFTé”®æŒ‰é”®çŠ¶æ€
+    key_status_t ctrl; //CTRLé”®æŒ‰é”®çŠ¶æ€
+    key_status_t v; //Vé”®æŒ‰é”®çŠ¶æ€
+    key_status_t g; //Gé”®æŒ‰é”®çŠ¶æ€
+    key_status_t x; //Xé”®æŒ‰é”®çŠ¶æ€
+    key_status_t b; //Bé”®æŒ‰é”®çŠ¶æ€
+    key_status_t z; //Zé”®æŒ‰é”®çŠ¶æ€
+    key_status_t r; //Ré”®æŒ‰é”®çŠ¶æ€
+    key_status_t c; //Cé”®æŒ‰é”®çŠ¶æ€
 
-    key_status_t r; //V¼ü°´¼ü×´Ì¬
-
-    /* ÔË¶¯Ä£Ê½£¬¼üÅÌ¿ØÖÆµ×ÅÌÔË¶¯¿ìÂı */
+    /* è¿åŠ¨æ¨¡å¼ï¼Œé”®ç›˜æ§åˆ¶åº•ç›˜è¿åŠ¨å¿«æ…¢ */
     key_move_e move_mode;
 
 } keyboard_control_t;
@@ -77,10 +77,10 @@ typedef struct
 typedef struct {
     uint8_t mouse_enable;
 
-    /* ×óÓÒ°´¼ü×´Ì¬ */
-    key_state_e lk_state; //×ó²à°´¼ü×´Ì¬
-    key_state_e mk_state; //ÖĞ¼ä°´¼ü×´Ì¬
-    key_state_e rk_state; //ÓÒ²à°´¼ü×´Ì¬
+    /* å·¦å³æŒ‰é”®çŠ¶æ€ */
+    key_state_e lk_state; //å·¦ä¾§æŒ‰é”®çŠ¶æ€
+    key_state_e mk_state; //ä¸­é—´æŒ‰é”®çŠ¶æ€
+    key_state_e rk_state; //å³ä¾§æŒ‰é”®çŠ¶æ€
 
     uint16_t lk_cnt;
     uint16_t mk_cnt;
@@ -89,22 +89,22 @@ typedef struct {
 } mouse_control_t;
 
 /**
-  * @brief ½âÎöºóµÄÒ£¿ØÆ÷Êı¾İ½á¹¹Ìå
+  * @brief è§£æåçš„é¥æ§å™¨æ•°æ®ç»“æ„ä½“
   */
 typedef struct
 {
-    /* PC Êó±êÊı¾İ */
+    /* PC é¼ æ ‡æ•°æ® */
     struct
     {
-        int16_t x;   // Êó±êË®Æ½Æ½ÒÆ,¸ºÖµ±êÊ¶Ïò×óÒÆ¶¯
-        int16_t y;   // Êó±ê´¹Ö±ÒÆ¶¯,¸ºÖµ±êÊ¶ÏòÏÂÒÆ¶¯
-        int16_t z;   // Êó±ê¹öÂÖ¹ö¶¯,¸ºÖµ±êÊ¶Ïòºó¹ö¶¯
-        uint8_t l;   // Êó±ê×ó¼ü£¬1Îª°´ÏÂ£¬0ÎªËÉ¿ª
-        uint8_t r;   // Êó±êÓÒ¼ü£¬1Îª°´ÏÂ£¬0ÎªËÉ¿ª
-        
+        int16_t x;   // é¼ æ ‡æ°´å¹³å¹³ç§»,è´Ÿå€¼æ ‡è¯†å‘å·¦ç§»åŠ¨
+        int16_t y;   // é¼ æ ‡å‚ç›´ç§»åŠ¨,è´Ÿå€¼æ ‡è¯†å‘ä¸‹ç§»åŠ¨
+        int16_t z;   // é¼ æ ‡æ»šè½®æ»šåŠ¨,è´Ÿå€¼æ ‡è¯†å‘åæ»šåŠ¨
+        uint8_t l;   // é¼ æ ‡å·¦é”®ï¼Œ1ä¸ºæŒ‰ä¸‹ï¼Œ0ä¸ºæ¾å¼€
+        uint8_t r;   // é¼ æ ‡å³é”®ï¼Œ1ä¸ºæŒ‰ä¸‹ï¼Œ0ä¸ºæ¾å¼€
+
     } mouse;
 
-    /* PC ¼üÅÌ°´¼üÊı¾İ */
+    /* PC é”®ç›˜æŒ‰é”®æ•°æ® */
     union
     {
         uint16_t key_code;
@@ -121,8 +121,8 @@ typedef struct
             uint16_t R     :1;
             uint16_t F     :1;
             uint16_t G     :1;
-            uint16_t Z     :1;//¿ØÖÆ¼Ğ×¦
-            uint16_t X     :1;//¿ØÖÆ¼Ğ×¦
+            uint16_t Z     :1;//æ§åˆ¶å¤¹çˆª
+            uint16_t X     :1;//æ§åˆ¶å¤¹çˆª
             uint16_t C     :1;
             uint16_t V     :1;
             uint16_t B     :1;

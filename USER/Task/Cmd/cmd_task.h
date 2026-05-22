@@ -10,7 +10,6 @@ void remote_to_cmd_sbus(void);
 void Gripper_ctrl(void);
 
 
-
 typedef enum
 {
     Gripper_OPEN,

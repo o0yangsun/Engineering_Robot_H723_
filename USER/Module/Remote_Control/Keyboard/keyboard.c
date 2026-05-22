@@ -1,5 +1,5 @@
 //
-// Created by Áõ¼Î¿¡ on 25-3-8.
+// Created by åˆ˜å˜‰ä¿Š on 25-3-8.
 //
 
 #include "keyboard.h"
@@ -13,6 +13,7 @@
 #include "pump.h"
 #include "DMmotor_task.h"
 #include "cmd_task.h"
+#include "Auto_store.h"
 
 
 /* key acceleration time */
@@ -20,60 +21,62 @@
 
 extern struct referee_fdb_msg referee_fdb;
 extern struct cmd_chassis_msg cmd_chassis;
-extern ramp_obj_t *km_vx_ramp;//xÖá¿ØÖÆÐ±ÆÂ
-extern ramp_obj_t *km_vy_ramp;//yÖÜ¿ØÖÆÐ±ÆÂ
-extern ramp_obj_t *km_vw_ramp; // Ðý×ª¿ØÖÆÐ±ÆÂ£¬ÐèÔÚÍâ²¿¶¨Òå
+extern ramp_obj_t *km_vx_ramp;//xè½´æŽ§åˆ¶æ–œå¡
+extern ramp_obj_t *km_vy_ramp;//yå‘¨æŽ§åˆ¶æ–œå¡
+extern ramp_obj_t *km_vw_ramp; // æ—‹è½¬æŽ§åˆ¶æ–œå¡ï¼Œéœ€åœ¨å¤–éƒ¨å®šä¹‰
 
-extern ramp_obj_t *nuc_km_vx_ramp;//xÖá¿ØÖÆÐ±ÆÂ
-extern ramp_obj_t *nuc_km_vy_ramp;//yÖÜ¿ØÖÆÐ±ÆÂ
-extern ramp_obj_t *nuc_km_vw_ramp; // Ðý×ª¿ØÖÆÐ±ÆÂ£¬ÐèÔÚÍâ²¿¶¨Òå
+extern ramp_obj_t *nuc_km_vx_ramp;//xè½´æŽ§åˆ¶æ–œå¡
+extern ramp_obj_t *nuc_km_vy_ramp;//yå‘¨æŽ§åˆ¶æ–œå¡
+extern ramp_obj_t *nuc_km_vw_ramp; // æ—‹è½¬æŽ§åˆ¶æ–œå¡ï¼Œéœ€åœ¨å¤–éƒ¨å®šä¹‰
 
 static float base_delta = 3.0f  / KEY_ACC_TIME;
 static float base_delta_w = MAX_CHASSIS_VW_SPEED  / KEY_ACC_TIME;
 
-/* Ê±¼ä²ÎÊýºê¶¨Òå */
-#define LONG_PRESS_DEFAULT_MS   800   // Ä¬ÈÏ³¤°´Ê±¼ä
-#define SHIFT_LONG_PRESS_MS     500   // SHIFT³¤°´Ê±¼ä
-#define FUNCTION_KEY_PRESS_MS   300   // ¹¦ÄÜ¼ü³¤°´Ê±¼ä
-/* ¿ØÖÆ²ÎÊý¶¨Òå ------------------------------------------------------------*/
-#define LONG_PRESS_TIME       600     // ³¤°´ÅÐ¶¨Ê±¼ä(ms)
-#define DEBOUNCE_TIME         10      // Ïû¶¶Ê±¼ä(ms)
-#define MICRO_SENSITIVITY     0.4f    // CTRLÎ¢µ÷ÁéÃô¶ÈÏµÊý
-#define BOOST_FACTOR          1.2f    // SHIFT¼ÓËÙ±¶ÂÊ
-#define NORMAL_DECAY          0.85f   // ³£¹æË¥¼õÏµÊý
-#define MICRO_DECAY           0.95f   // Î¢µ÷Ä£Ê½Ë¥¼õÏµÊý
-#define DEAD_ZONE             5.0f    // ËÙ¶ÈËÀÇø(mm/s)
+/* æ—¶é—´å‚æ•°å®å®šä¹‰ */
+#define LONG_PRESS_DEFAULT_MS   800   // é»˜è®¤é•¿æŒ‰æ—¶é—´
+#define SHIFT_LONG_PRESS_MS     500   // SHIFTé•¿æŒ‰æ—¶é—´
+#define FUNCTION_KEY_PRESS_MS   300   // åŠŸèƒ½é”®é•¿æŒ‰æ—¶é—´
+/* æŽ§åˆ¶å‚æ•°å®šä¹‰ ------------------------------------------------------------*/
+#define LONG_PRESS_TIME       600     // é•¿æŒ‰åˆ¤å®šæ—¶é—´(ms)
+#define DEBOUNCE_TIME         10      // æ¶ˆæŠ–æ—¶é—´(ms)
+#define MICRO_SENSITIVITY     0.4f    // CTRLå¾®è°ƒçµæ•åº¦ç³»æ•°
+#define BOOST_FACTOR          1.2f    // SHIFTåŠ é€Ÿå€çŽ‡
+#define NORMAL_DECAY          0.85f   // å¸¸è§„è¡°å‡ç³»æ•°
+#define MICRO_DECAY           0.95f   // å¾®è°ƒæ¨¡å¼è¡°å‡ç³»æ•°
+#define DEAD_ZONE             5.0f    // é€Ÿåº¦æ­»åŒº(mm/s)
 
 extern Gripper_mode_e gripper_state;
-// È«¾Ö¼üÅÌ¿ØÖÆ¶ÔÏó¶¨Òå
+// å…¨å±€é”®ç›˜æŽ§åˆ¶å¯¹è±¡å®šä¹‰
 keyboard_control_t keyboard = {
         .vx = 0, .vy = 0, .vw = 0,
         .max_spd = 3000,
         .move_mode = NORMAL_MODE,
-        .shift = {KEY_RELEASE, 0, 500, 0},   // SHIFT³¤°´800ms
-        .ctrl  = {KEY_RELEASE, 0, 500, 0},   // CTRL³¤°´800ms
-        .v     = {KEY_RELEASE, 0, 800, 0},   // V¼ü¶Ì°´800ms
-        .b     = {KEY_RELEASE, 0, 800, 0},   // V¼ü¶Ì°´800ms
-        .g     = {KEY_RELEASE, 0, 800, 0},   // G¼ü¿ìËÙÏìÓ¦
-        .f     = {KEY_RELEASE, 0, 800, 0},    // F¼ü¿ìËÙÏìÓ¦
-        .x     = {KEY_RELEASE, 0, 800, 0},    // F¼ü¿ìËÙÏìÓ¦
+        .shift = {KEY_RELEASE, 0, 500, 0},   // SHIFTé•¿æŒ‰500ms
+        .ctrl  = {KEY_RELEASE, 0, 500, 0},   // CTRLé•¿æŒ‰500ms
+        .v     = {KEY_RELEASE, 0, 800, 0},   // Vé”®çŸ­æŒ‰800ms
+        .b     = {KEY_RELEASE, 0, 800, 0},   // Bé”®çŸ­æŒ‰800ms
+        .g     = {KEY_RELEASE, 0, 500, 0},   // Gé”®é•¿æŒ‰500msï¼Œè§¦å‘å³è¾¹Store
+        .f     = {KEY_RELEASE, 0, 500, 0},   // Fé”®é•¿æŒ‰500msï¼Œè§¦å‘å·¦è¾¹Store
+        .x     = {KEY_RELEASE, 0, 800, 0},
         .z     = {KEY_RELEASE, 0, 800, 0},
-        .r     = {KEY_RELEASE, 0, 800, 0}    // F¼ü¿ìËÙÏìÓ¦
+        .r     = {KEY_RELEASE, 0, 500, 0},   // Ré”®é•¿æŒ‰500msï¼Œè§¦å‘æ”¾ç½®å·¦è¾¹
+        .c     = {KEY_RELEASE, 0, 500, 0}    // Cé”®é•¿æŒ‰500msï¼Œè§¦å‘å³è¾¹æ‹¿å–
 };
 
 keyboard_control_t nuc_keyboard = {
         .vx = 0, .vy = 0, .vw = 0,
         .max_spd = 3000,
         .move_mode = NORMAL_MODE,
-        .shift = {KEY_RELEASE, 0, 500, 0},   // SHIFT³¤°´800ms
-        .ctrl  = {KEY_RELEASE, 0, 500, 0},   // CTRL³¤°´800ms
-        .v     = {KEY_RELEASE, 0, 800, 0},   // V¼ü¶Ì°´800ms
-        .b     = {KEY_RELEASE, 0, 800, 0},   // V¼ü¶Ì°´800ms
-        .g     = {KEY_RELEASE, 0, 800, 0},   // G¼ü¿ìËÙÏìÓ¦
-        .f     = {KEY_RELEASE, 0, 800, 0},    // F¼ü¿ìËÙÏìÓ¦
-        .x     = {KEY_RELEASE, 0, 800, 0},    // F¼ü¿ìËÙÏìÓ¦
+        .shift = {KEY_RELEASE, 0, 500, 0},
+        .ctrl  = {KEY_RELEASE, 0, 500, 0},
+        .v     = {KEY_RELEASE, 0, 800, 0},
+        .b     = {KEY_RELEASE, 0, 800, 0},
+        .g     = {KEY_RELEASE, 0, 500, 0},
+        .f     = {KEY_RELEASE, 0, 500, 0},
+        .x     = {KEY_RELEASE, 0, 800, 0},
         .z     = {KEY_RELEASE, 0, 800, 0},
-        .r     = {KEY_RELEASE, 0, 800, 0}    // F¼ü¿ìËÙÏìÓ¦
+        .r     = {KEY_RELEASE, 0, 500, 0},
+        .c     = {KEY_RELEASE, 0, 500, 0}
 };
 mouse_control_t mouse = {0} ;
 
@@ -102,7 +105,7 @@ void key_state_machine(key_status_t *key, uint8_t key_input)
             if (key_input)
             {
                 key->state = KEY_PRESS_ONCE;
-                // ¸ù¾Ý¾ßÌåÇé¿öÑ¡Ôñ×ó¼ü»¹ÊÇÓÒ¼ü¼ÆÊýÖØÖÃ
+                // æ ¹æ®å…·ä½“æƒ…å†µé€‰æ‹©å·¦é”®è¿˜æ˜¯å³é”®è®¡æ•°é‡ç½®
                 if (key->state == mouse.lk_state)
                     mouse.lk_cnt = 0;
                 else
@@ -145,9 +148,9 @@ void key_state_machine(key_status_t *key, uint8_t key_input)
 }
 
 /*
-* @brief ½«²ÃÅÐÏµÍ³½âÎöºóµÄ¼üÅÌÊó±êÊý¾Ý×ª»»³É·½±ãÊ¹ÓÃµÄÒ£¿ØÆ÷Êý¾Ý½á¹¹Ìå
-* @param remote Ö¸ÏòÔ­Ê¼²ÃÅÐÏµÍ³Êý¾ÝµÄÖ¸Õë
-* @return ×ª»»ºóµÄÒ£¿ØÆ÷Êý¾Ý½á¹¹Ìå
+* @brief å°†è£åˆ¤ç³»ç»Ÿè§£æžåŽçš„é”®ç›˜é¼ æ ‡æ•°æ®è½¬æ¢æˆæ–¹ä¾¿ä½¿ç”¨çš„é¥æŽ§å™¨æ•°æ®ç»“æž„ä½“
+* @param remote æŒ‡å‘åŽŸå§‹è£åˆ¤ç³»ç»Ÿæ•°æ®çš„æŒ‡é’ˆ
+* @return è½¬æ¢åŽçš„é¥æŽ§å™¨æ•°æ®ç»“æž„ä½“
 */
 pc_control_t convert_remote_to_pc(const vt13_remote_parsed_data_t *remote)
 {
@@ -155,7 +158,7 @@ pc_control_t convert_remote_to_pc(const vt13_remote_parsed_data_t *remote)
 
     if(remote == NULL)
     {
-        // Èç¹ûÐèÒª£¬¿ÉÒÔÔÚ´Ë´¦Àí´íÎóÇé¿ö
+        // å¦‚æžœéœ€è¦ï¼Œå¯ä»¥åœ¨æ­¤å¤„ç†é”™è¯¯æƒ…å†µ
         pc.mouse.x = 0;
         pc.mouse.y = 0;
         pc.mouse.z = 0;
@@ -184,28 +187,14 @@ void PC_keyboard_mouse(const pc_control_t *pc_control)
 
     key_state_machine(&keyboard.x, pc_control->keyboard.bit.X);
     key_state_machine(&keyboard.z, pc_control->keyboard.bit.Z);
-    // X°´¼üÓÃÓÚ´ò¿ª¼Ð×¦
+    // XæŒ‰é”®ç”¨äºŽæ‰“å¼€å¤¹çˆª
     if(keyboard.x.state == KEY_PRESS_ONCE) {
         gripper_state = Gripper_OPEN;
     }
-    // Z°´¼üÓÃÓÚ¹Ø±Õ¼Ð×¦
+    // ZæŒ‰é”®ç”¨äºŽå…³é—­å¤¹çˆª
     if(keyboard.z.state == KEY_PRESS_ONCE) {
         gripper_state = Gripper_CLOSE;
     }
-
-//    key_state_machine(&keyboard.g,pc_control->keyboard.bit.G);
-//    if (keyboard.g.state == KEY_PRESS_ONCE)
-//    {
-//        cmd_chassis.last_mode= cmd_chassis.ctrl_mode;
-//        cmd_chassis.ctrl_mode =CHASSIS_RELAX;
-//    }
-//
-//    key_state_machine(&keyboard.f,pc_control->keyboard.bit.F);
-//    if (keyboard.f.state == KEY_PRESS_ONCE)
-//    {
-//        cmd_chassis.last_mode= cmd_chassis.ctrl_mode;
-//        cmd_chassis.ctrl_mode=CHASSIS_ENABLE;
-//    }
 
     key_state_machine(&keyboard.b,pc_control->keyboard.bit.B);
     if (keyboard.b.state == KEY_PRESS_LONG)
@@ -221,23 +210,23 @@ void PC_keyboard_mouse(const pc_control_t *pc_control)
         arm_cmd.ctrl_mode = ARM_ENABLE;
     }
 
-    /* Ä£Ê½ÓÅÏÈ¼¶´¦Àí */
+    /* æ¨¡å¼ä¼˜å…ˆçº§å¤„ç† */
     keyboard.move_mode = NORMAL_MODE;
     keyboard.max_spd = 0.8f;
-    // ÏÈ´¦ÀíCTRL
+    // å…ˆå¤„ç†CTRL
     key_state_machine(&keyboard.ctrl, pc_control->keyboard.bit.CTRL);
     if(keyboard.ctrl.state == KEY_PRESS_LONG) {
         keyboard.move_mode = SLOW_MODE;
         keyboard.max_spd = 0.4f;
     }
-    // ºó´¦ÀíSHIFT£¨¸ü¸ßÓÅÏÈ¼¶£©
+    // åŽå¤„ç†SHIFTï¼ˆæ›´é«˜ä¼˜å…ˆçº§ï¼‰
     key_state_machine(&keyboard.shift, pc_control->keyboard.bit.SHIFT);
     if(keyboard.shift.state == KEY_PRESS_LONG) {
         keyboard.move_mode = FAST_MODE;
         keyboard.max_spd = 1.2f;
     }
 
-    /* ¼ÆËã¶¯Ì¬²ÎÊý */
+    /* è®¡ç®—åŠ¨æ€å‚æ•° */
     float delta = (keyboard.move_mode == FAST_MODE) ?
                   (base_delta * BOOST_FACTOR) :
                   (keyboard.move_mode == SLOW_MODE) ?
@@ -248,7 +237,7 @@ void PC_keyboard_mouse(const pc_control_t *pc_control)
                   MICRO_DECAY : NORMAL_DECAY;
 
 
-    // Ç°ºó·½Ïò£¨W/S -> vy£©
+    // å‰åŽæ–¹å‘ï¼ˆW/S -> vyï¼‰
     if(pc_control->keyboard.bit.W) {
         keyboard.vx += delta;
     } else if(pc_control->keyboard.bit.S) {
@@ -257,29 +246,23 @@ void PC_keyboard_mouse(const pc_control_t *pc_control)
         keyboard.vx *= (1 - km_vy_ramp->calc(km_vy_ramp) * decay);
     }
 
-    // ×óÓÒ·½Ïò£¨A/D -> vx£©
+    // å·¦å³æ–¹å‘ï¼ˆA/D -> vxï¼‰
     if(pc_control->keyboard.bit.A) {
         keyboard.vy -= delta;
     } else if(pc_control->keyboard.bit.D) {
         keyboard.vy += delta;
-    } else {     //TODO: ¼ÓËÙÐ±ÆÂº¯Êý·´×ª£¬±ä³É¼õËÙÐ±ÆÂº¯Êý£¬¼ÓËÙ½×¶Î²»Ê¹ÓÃÐ±ÆÂº¯Êý
+    } else {     //TODO: åŠ é€Ÿæ–œå¡å‡½æ•°åè½¬ï¼Œå˜æˆå‡é€Ÿæ–œå¡å‡½æ•°ï¼ŒåŠ é€Ÿé˜¶æ®µä¸ä½¿ç”¨æ–œå¡å‡½æ•°
         keyboard.vy *= (1 - km_vy_ramp->calc(km_vy_ramp) * decay);
     }
 
-    // Ðý×ª¿ØÖÆ£¨Q/E£©
+    // æ—‹è½¬æŽ§åˆ¶ï¼ˆQ/Eï¼‰
     if(pc_control->keyboard.bit.Q) {
-        keyboard.vw -= base_delta_w * 1.25f;  // Ðý×ªÁéÃô¶ÈÏµÊý
+        keyboard.vw -= base_delta_w * 1.25f;  // æ—‹è½¬çµæ•åº¦ç³»æ•°
     } else if(pc_control->keyboard.bit.E) {
         keyboard.vw += base_delta_w * 1.25f;
     } else {
         keyboard.vw *= (1 - km_vw_ramp->calc(km_vw_ramp) * decay);
     }
-
-//    // ËÀÇø´¦Àí
-//    if(fabs(keyboard.vx) < DEAD_ZONE) keyboard.vx = 0;
-//    if(fabs(keyboard.vy) < DEAD_ZONE) keyboard.vy = 0;
-//    if(fabs(keyboard.vw) < DEAD_ZONE) keyboard.vw = 0;
-
 
     VAL_LIMIT(keyboard.vx, -keyboard.max_spd, keyboard.max_spd);
     VAL_LIMIT(keyboard.vy, -keyboard.max_spd, keyboard.max_spd);
@@ -288,14 +271,33 @@ void PC_keyboard_mouse(const pc_control_t *pc_control)
     VAL_LIMIT(keyboard.vy, -MAX_CHASSIS_VY_SPEED, MAX_CHASSIS_VY_SPEED);
     VAL_LIMIT(keyboard.vw, -MAX_CHASSIS_VW_SPEED, MAX_CHASSIS_VW_SPEED);
 
+    /* Ré”®é•¿æŒ‰500ms - æ”¾ç½®å·¦è¾¹å­˜å‚¨ç½ */
+    key_state_machine(&keyboard.r, pc_control->keyboard.bit.R);
+    if (keyboard.r.state == KEY_PRESS_LONG && !auto_store_kb_trigger) {
+        auto_store_kb_target = AUTO_LEFT_PLACE;
+        auto_store_kb_trigger = 1;
+    }
 
+    /* Fé”®é•¿æŒ‰500ms - æ‹¿å–å·¦è¾¹å­˜å‚¨ç½ */
+    key_state_machine(&keyboard.f, pc_control->keyboard.bit.F);
+    if (keyboard.f.state == KEY_PRESS_LONG && !auto_store_kb_trigger) {
+        auto_store_kb_target = AUTO_LEFT_GRAB;
+        auto_store_kb_trigger = 1;
+    }
 
-//    key_state_machine(&keyboard.r,pc_control->keyboard.bit.R);
-//    if (keyboard.r.state == KEY_PRESS_ONCE)
-//    {
-//        arm_cmd.last_mode = arm_cmd.ctrl_mode;
-//        arm_cmd.ctrl_mode = ARM_INIT;
-//    }
+    /* Gé”®é•¿æŒ‰500ms - æ”¾ç½®å³è¾¹å­˜å‚¨ç½ */
+    key_state_machine(&keyboard.g, pc_control->keyboard.bit.G);
+    if (keyboard.g.state == KEY_PRESS_LONG && !auto_store_kb_trigger) {
+        auto_store_kb_target = AUTO_RIGHT_PLACE;
+        auto_store_kb_trigger = 1;
+    }
+
+    /* Cé”®é•¿æŒ‰500ms - æ‹¿å–å³è¾¹å­˜å‚¨ç½ */
+    key_state_machine(&keyboard.c, pc_control->keyboard.bit.C);
+    if (keyboard.c.state == KEY_PRESS_LONG && !auto_store_kb_trigger) {
+        auto_store_kb_target = AUTO_RIGHT_GRAB;
+        auto_store_kb_trigger = 1;
+    }
 }
 
 
@@ -304,28 +306,14 @@ void NUC_keyboard_mouse(const pc_control_t *pc_control)
 
     key_state_machine(&nuc_keyboard.x, pc_control->keyboard.bit.X);
     key_state_machine(&nuc_keyboard.z, pc_control->keyboard.bit.Z);
-    // X°´¼üÓÃÓÚ´ò¿ª¼Ð×¦
+    // XæŒ‰é”®ç”¨äºŽæ‰“å¼€å¤¹çˆª
     if(nuc_keyboard.x.state == KEY_PRESS_ONCE) {
         gripper_state = Gripper_OPEN;
     }
-    // Z°´¼üÓÃÓÚ¹Ø±Õ¼Ð×¦
+    // ZæŒ‰é”®ç”¨äºŽå…³é—­å¤¹çˆª
     if(nuc_keyboard.z.state == KEY_PRESS_ONCE) {
         gripper_state = Gripper_CLOSE;
     }
-
-//    key_state_machine(&keyboard.g,pc_control->keyboard.bit.G);
-//    if (keyboard.g.state == KEY_PRESS_ONCE)
-//    {
-//        cmd_chassis.last_mode= cmd_chassis.ctrl_mode;
-//        cmd_chassis.ctrl_mode =CHASSIS_RELAX;
-//    }
-//
-//    key_state_machine(&keyboard.f,pc_control->keyboard.bit.F);
-//    if (keyboard.f.state == KEY_PRESS_ONCE)
-//    {
-//        cmd_chassis.last_mode= cmd_chassis.ctrl_mode;
-//        cmd_chassis.ctrl_mode=CHASSIS_ENABLE;
-//    }
 
     key_state_machine(&nuc_keyboard.b,pc_control->keyboard.bit.B);
     if (nuc_keyboard.b.state == KEY_PRESS_LONG)
@@ -341,23 +329,23 @@ void NUC_keyboard_mouse(const pc_control_t *pc_control)
         arm_cmd.ctrl_mode = ARM_ENABLE;
     }
 
-    /* Ä£Ê½ÓÅÏÈ¼¶´¦Àí */
+    /* æ¨¡å¼ä¼˜å…ˆçº§å¤„ç† */
     nuc_keyboard.move_mode = NORMAL_MODE;
     nuc_keyboard.max_spd = 0.8f;
-    // ÏÈ´¦ÀíCTRL
+    // å…ˆå¤„ç†CTRL
     key_state_machine(&nuc_keyboard.ctrl, pc_control->keyboard.bit.CTRL);
     if(nuc_keyboard.ctrl.state == KEY_PRESS_LONG) {
         nuc_keyboard.move_mode = SLOW_MODE;
         nuc_keyboard.max_spd = 0.4f;
     }
-    // ºó´¦ÀíSHIFT£¨¸ü¸ßÓÅÏÈ¼¶£©
+    // åŽå¤„ç†SHIFTï¼ˆæ›´é«˜ä¼˜å…ˆçº§ï¼‰
     key_state_machine(&nuc_keyboard.shift, pc_control->keyboard.bit.SHIFT);
     if(nuc_keyboard.shift.state == KEY_PRESS_LONG) {
         nuc_keyboard.move_mode = FAST_MODE;
         nuc_keyboard.max_spd = 1.2f;
     }
 
-    /* ¼ÆËã¶¯Ì¬²ÎÊý */
+    /* è®¡ç®—åŠ¨æ€å‚æ•° */
     float delta = (nuc_keyboard.move_mode == FAST_MODE) ?
                   (base_delta * BOOST_FACTOR) :
                   (nuc_keyboard.move_mode == SLOW_MODE) ?
@@ -367,8 +355,7 @@ void NUC_keyboard_mouse(const pc_control_t *pc_control)
     float decay = (nuc_keyboard.move_mode == SLOW_MODE) ?
                   MICRO_DECAY : NORMAL_DECAY;
 
-
-    // Ç°ºó·½Ïò£¨W/S -> vy£©
+    // å‰åŽæ–¹å‘ï¼ˆW/S -> vyï¼‰
     if(pc_control->keyboard.bit.W) {
         nuc_keyboard.vx += delta;
     } else if(pc_control->keyboard.bit.S) {
@@ -377,7 +364,7 @@ void NUC_keyboard_mouse(const pc_control_t *pc_control)
         nuc_keyboard.vx *= (1 - nuc_km_vx_ramp->calc(nuc_km_vx_ramp) * decay);
     }
 
-    // ×óÓÒ·½Ïò£¨A/D -> vx£©
+    // å·¦å³æ–¹å‘ï¼ˆA/D -> vxï¼‰
     if(pc_control->keyboard.bit.A) {
         nuc_keyboard.vy -= delta;
     } else if(pc_control->keyboard.bit.D) {
@@ -386,20 +373,14 @@ void NUC_keyboard_mouse(const pc_control_t *pc_control)
         nuc_keyboard.vy *= (1 - nuc_km_vy_ramp->calc( nuc_km_vy_ramp) * decay);
     }
 
-    // Ðý×ª¿ØÖÆ£¨Q/E£©
+    // æ—‹è½¬æŽ§åˆ¶ï¼ˆQ/Eï¼‰
     if(pc_control->keyboard.bit.Q) {
-        nuc_keyboard.vw -= base_delta_w * 1.25f;  // Ðý×ªÁéÃô¶ÈÏµÊý
+        nuc_keyboard.vw -= base_delta_w * 1.25f;  // æ—‹è½¬çµæ•åº¦ç³»æ•°
     } else if(pc_control->keyboard.bit.E) {
         nuc_keyboard.vw += base_delta_w * 1.25f;
     } else {
         nuc_keyboard.vw *= (1 -nuc_km_vw_ramp->calc(nuc_km_vw_ramp) * decay);
     }
-
-//    // ËÀÇø´¦Àí
-//    if(fabs(keyboard.vx) < DEAD_ZONE) keyboard.vx = 0;
-//    if(fabs(keyboard.vy) < DEAD_ZONE) keyboard.vy = 0;
-//    if(fabs(keyboard.vw) < DEAD_ZONE) keyboard.vw = 0;
-
 
     VAL_LIMIT(nuc_keyboard.vx, -nuc_keyboard.max_spd, nuc_keyboard.max_spd);
     VAL_LIMIT(nuc_keyboard.vy, -nuc_keyboard.max_spd, nuc_keyboard.max_spd);
@@ -408,14 +389,31 @@ void NUC_keyboard_mouse(const pc_control_t *pc_control)
     VAL_LIMIT(nuc_keyboard.vy, -MAX_CHASSIS_VY_SPEED, MAX_CHASSIS_VY_SPEED);
     VAL_LIMIT(nuc_keyboard.vw, -MAX_CHASSIS_VW_SPEED, MAX_CHASSIS_VW_SPEED);
 
+    /* Ré”®é•¿æŒ‰500ms - æ”¾ç½®å·¦è¾¹å­˜å‚¨ç½ */
+    key_state_machine(&nuc_keyboard.r, pc_control->keyboard.bit.R);
+    if (nuc_keyboard.r.state == KEY_PRESS_LONG && !auto_store_kb_trigger) {
+        auto_store_kb_target = AUTO_LEFT_PLACE;
+        auto_store_kb_trigger = 1;
+    }
 
+    /* Fé”®é•¿æŒ‰500ms - æ‹¿å–å·¦è¾¹å­˜å‚¨ç½ */
+    key_state_machine(&nuc_keyboard.f, pc_control->keyboard.bit.F);
+    if (nuc_keyboard.f.state == KEY_PRESS_LONG && !auto_store_kb_trigger) {
+        auto_store_kb_target = AUTO_LEFT_GRAB;
+        auto_store_kb_trigger = 1;
+    }
 
-//    key_state_machine(&keyboard.r,pc_control->keyboard.bit.R);
-//    if (keyboard.r.state == KEY_PRESS_ONCE)
-//    {
-//        arm_cmd.last_mode = arm_cmd.ctrl_mode;
-//        arm_cmd.ctrl_mode = ARM_INIT;
-//    }
+    /* Gé”®é•¿æŒ‰500ms - æ”¾ç½®å³è¾¹å­˜å‚¨ç½ */
+    key_state_machine(&nuc_keyboard.g, pc_control->keyboard.bit.G);
+    if (nuc_keyboard.g.state == KEY_PRESS_LONG && !auto_store_kb_trigger) {
+        auto_store_kb_target = AUTO_RIGHT_PLACE;
+        auto_store_kb_trigger = 1;
+    }
+
+    /* Cé”®é•¿æŒ‰500ms - æ‹¿å–å³è¾¹å­˜å‚¨ç½ */
+    key_state_machine(&nuc_keyboard.c, pc_control->keyboard.bit.C);
+    if (nuc_keyboard.c.state == KEY_PRESS_LONG && !auto_store_kb_trigger) {
+        auto_store_kb_target = AUTO_RIGHT_GRAB;
+        auto_store_kb_trigger = 1;
+    }
 }
-
-

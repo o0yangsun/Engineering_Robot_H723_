@@ -4,7 +4,7 @@
 #include "cmsis_os.h"
 #include "tim.h"
 
-#define STORE_MOVE_DELAY_MS  200  // 舵机旋转就位延时(ms)
+#define STORE_MOVE_DELAY_MS  1000  // 舵机旋转就位延时(ms)
 
 typedef enum
 {
