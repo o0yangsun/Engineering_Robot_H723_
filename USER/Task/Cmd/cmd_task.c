@@ -32,7 +32,6 @@
 #include "chassis_task.h"
 #include "store.h"
 #include "tim.h"
-#include "store.h"
 /* -------------------------------- 线程间通讯Topics相关 ------------------------------- */
 
 static struct cmd_chassis_msg pc_cmd_data;
@@ -56,6 +55,7 @@ static float cmd_task_delta = 0;    // 监测线程运行时间
 static float cmd_task_start_dt = 0; // 监测线程开始时间
 /* -------------------------------- 调试监测线程相关 --------------------------------- */
 
+
 extern sbus_data_t sbus_data_fdb;
 extern keyboard_control_t keyboard;
 extern keyboard_control_t nuc_keyboard;
@@ -67,6 +67,8 @@ static Arm_mode_e dm_arm_ctrl_mode;
 extern struct referee_fdb_msg referee_fdb;
 struct cmd_chassis_msg cmd_chassis;
 extern Gripper_mode_e gripper_state ;
+
+
 
 /* 外部变量声明 */
 /*键盘加速度的斜坡*/
@@ -91,7 +93,6 @@ void CmdTask_Entry(void const * argument)
     sbus_data_fdb.sw4 = RC_UP;
 
     vt13_remote_data_init();
-
     km_vx_ramp = ramp_register(0, 200); //2500000
     km_vy_ramp = ramp_register(0, 200);  // 0 -2的累加次数
     km_vw_ramp = ramp_register(0, 200);
@@ -132,7 +133,7 @@ void CmdTask_Entry(void const * argument)
         remote_to_cmd_sbus();
         arm_cmd_state_machine(); // 机械臂状态机
         chassis_cmd_state_machine();
-        store_ctrl();//存储罐控制
+
 /* -------------------------------- 线程代码编写段落 ------------------------------- */
 
 /* -------------------------------- 线程发布Topics信息 ------------------------------- */
@@ -226,12 +227,12 @@ void remote_to_cmd_sbus(void) {
         fn_2_last_state = vt13_remote_parsed_data_fdb.fn_2;
     } else {
         // 原SBUS遥控器数据（保持原有逻辑）
-            cmd_chassis.vx = (sbus_data_fdb.ch2 * CHASSIS_RC_MOVE_RATIO_X / RC_MAX_VALUE
-                              + keyboard.vx * CHASSIS_PC_MOVE_RATIO_X + pc_cmd_data.vx+receive_pc_cmd_voice_control_data.vx + nuc_keyboard.vx * CHASSIS_PC_MOVE_RATIO_X);
-            cmd_chassis.vy = (sbus_data_fdb.ch4 * CHASSIS_RC_MOVE_RATIO_Y / RC_MAX_VALUE
-                              + keyboard.vy * CHASSIS_PC_MOVE_RATIO_Y + pc_cmd_data.vy+receive_pc_cmd_voice_control_data.vy + nuc_keyboard.vy * CHASSIS_PC_MOVE_RATIO_Y);
-            cmd_chassis.vw = (sbus_data_fdb.ch1 * CHASSIS_RC_MOVE_RATIO_W / RC_MAX_VALUE
-                              + keyboard.vw * CHASSIS_PC_MOVE_RATIO_W + pc_cmd_data.vw+receive_pc_cmd_voice_control_data.vw + nuc_keyboard.vw * CHASSIS_PC_MOVE_RATIO_W);
+        cmd_chassis.vx = (sbus_data_fdb.ch2 * CHASSIS_RC_MOVE_RATIO_X / RC_MAX_VALUE
+                          + keyboard.vx * CHASSIS_PC_MOVE_RATIO_X + pc_cmd_data.vx+receive_pc_cmd_voice_control_data.vx + nuc_keyboard.vx * CHASSIS_PC_MOVE_RATIO_X);
+        cmd_chassis.vy = (sbus_data_fdb.ch4 * CHASSIS_RC_MOVE_RATIO_Y / RC_MAX_VALUE
+                          + keyboard.vy * CHASSIS_PC_MOVE_RATIO_Y + pc_cmd_data.vy+receive_pc_cmd_voice_control_data.vy + nuc_keyboard.vy * CHASSIS_PC_MOVE_RATIO_Y);
+        cmd_chassis.vw = (sbus_data_fdb.ch1 * CHASSIS_RC_MOVE_RATIO_W / RC_MAX_VALUE
+                          + keyboard.vw * CHASSIS_PC_MOVE_RATIO_W + pc_cmd_data.vw+receive_pc_cmd_voice_control_data.vw + nuc_keyboard.vw * CHASSIS_PC_MOVE_RATIO_W);
         // 原SBUS遥控器泵模式控制（保持原有逻辑）
         if (sbus_data_fdb.sw3 == RC_MI) {
             gripper_state = Gripper_OPEN;
@@ -250,6 +251,13 @@ void remote_to_cmd_sbus(void) {
         } else if (sbus_data_fdb.sw1 == RC_DN) {
             arm_cmd.ctrl_mode = ARM_DISABLE;
         }
+
+        if (sbus_data_fdb.sw4 == RC_UP) {
+            dm_arm_ctrl_mode=User_defined_Controller;
+        } else if (sbus_data_fdb.sw4 == RC_DN) {
+            dm_arm_ctrl_mode=PC_based_Controller;
+        }
     }
 }
+
 

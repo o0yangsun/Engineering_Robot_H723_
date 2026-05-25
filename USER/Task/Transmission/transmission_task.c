@@ -184,29 +184,29 @@ void uppack_pc_cmd_arm_data(void)
 {
     //  /10000.0f与上位机约定好，因为传输float麻烦
     receive_pc_cmd_arm_msg_data.joint_pos[0] = (float)((Rx_data[4] << 0) |  // byte3占 31-24位
-                                                     (Rx_data[5] << 8) |  // byte2占 23-16位
-                                                     (Rx_data[6] << 16)  |  // byte1占 15-8位
-                                                     (Rx_data[7] << 24)) /10000.0f;    // byte0占 7-0位
+                                                       (Rx_data[5] << 8) |  // byte2占 23-16位
+                                                       (Rx_data[6] << 16)  |  // byte1占 15-8位
+                                                       (Rx_data[7] << 24)) /10000.0f;    // byte0占 7-0位
     receive_pc_cmd_arm_msg_data.joint_pos[1] = (float)((Rx_data[8] << 0) |  // byte3占 31-24位
-                                                     (Rx_data[9] << 8) |  // byte2占 23-16位
-                                                     (Rx_data[10] << 16)  |  // byte1占 15-8位
-                                                     (Rx_data[11] << 24)) /10000.0f;    // byte0占 7-0位
+                                                       (Rx_data[9] << 8) |  // byte2占 23-16位
+                                                       (Rx_data[10] << 16)  |  // byte1占 15-8位
+                                                       (Rx_data[11] << 24)) /10000.0f;    // byte0占 7-0位
     receive_pc_cmd_arm_msg_data.joint_pos[2] = (float)((Rx_data[12] << 0) |  // byte3占 31-24位
-                                                     (Rx_data[13] << 8) |  // byte2占 23-16位
-                                                     (Rx_data[14] << 16)  |  // byte1占 15-8位
-                                                     (Rx_data[15] << 24))/10000.0f;    // byte0占 7-0位
+                                                       (Rx_data[13] << 8) |  // byte2占 23-16位
+                                                       (Rx_data[14] << 16)  |  // byte1占 15-8位
+                                                       (Rx_data[15] << 24))/10000.0f;    // byte0占 7-0位
     receive_pc_cmd_arm_msg_data.joint_pos[3] = (float)((Rx_data[16] << 0) |  // byte3占 31-24位
-                                                     (Rx_data[17] << 8) |  // byte2占 23-16位
-                                                     (Rx_data[18] << 16)  |  // byte1占 15-8位
-                                                     (Rx_data[19] << 24)) /10000.0f;    // byte0占 7-0位
+                                                       (Rx_data[17] << 8) |  // byte2占 23-16位
+                                                       (Rx_data[18] << 16)  |  // byte1占 15-8位
+                                                       (Rx_data[19] << 24)) /10000.0f;    // byte0占 7-0位
     receive_pc_cmd_arm_msg_data.joint_pos[4] = (float)((Rx_data[20] << 0) |  // byte3占 31-24位
-                                                     (Rx_data[21] << 8) |  // byte2占 23-16位
-                                                     (Rx_data[22] << 16)  |  // byte1占 15-8位
-                                                     (Rx_data[23] << 24)) /10000.0f;    // byte0占 7-0位
+                                                       (Rx_data[21] << 8) |  // byte2占 23-16位
+                                                       (Rx_data[22] << 16)  |  // byte1占 15-8位
+                                                       (Rx_data[23] << 24)) /10000.0f;    // byte0占 7-0位
     receive_pc_cmd_arm_msg_data.joint_pos[5] = (float)((Rx_data[24] << 0) |  // byte3占 31-24位
-                                                     (Rx_data[25] << 8) |  // byte2占 23-16位
-                                                     (Rx_data[26] << 16)  |  // byte1占 15-8位
-                                                     (Rx_data[27] << 24)) /10000.0f;    // byte0占 7-0位
+                                                       (Rx_data[25] << 8) |  // byte2占 23-16位
+                                                       (Rx_data[26] << 16)  |  // byte1占 15-8位
+                                                       (Rx_data[27] << 24)) /10000.0f;    // byte0占 7-0位
     receive_pc_cmd_arm_msg_data.gripper_ctrl = (Rx_data[28] << 0) ;
     receive_pc_cmd_arm_msg_data.control_state = (Rx_data[29] << 0);
     receive_pc_cmd_arm_msg_data.pc_ctrl_process_state = (int8_t)(Rx_data[30] << 0);
@@ -216,17 +216,17 @@ void uppack_pc_cmd_arm_data(void)
 void uppack_pc_cmd_voice_control(void)
 {
     receive_pc_cmd_voice_control_data.vx = (float)((Rx_data[4] << 0) |  // byte3占 31-24位
-                                          (Rx_data[5] << 8) |  // byte2占 23-16位
-                                          (Rx_data[6] << 16)  |  // byte1占 15-8位
-                                          (Rx_data[7] << 24)) / 10000.0f;    // byte0占 7-0位
+                                                   (Rx_data[5] << 8) |  // byte2占 23-16位
+                                                   (Rx_data[6] << 16)  |  // byte1占 15-8位
+                                                   (Rx_data[7] << 24)) / 10000.0f;    // byte0占 7-0位
     receive_pc_cmd_voice_control_data.vy = (float)((Rx_data[8] << 0) |  // byte3? 31-24λ
-                                             (Rx_data[9] << 8) |  // byte2? 23-16λ
-                                             (Rx_data[10] << 16)  |  // byte1? 15-8λ
-                                             (Rx_data[11] << 24)) / 10000.0f;    // byte0? 7-0λ
+                                                   (Rx_data[9] << 8) |  // byte2? 23-16λ
+                                                   (Rx_data[10] << 16)  |  // byte1? 15-8λ
+                                                   (Rx_data[11] << 24)) / 10000.0f;    // byte0? 7-0λ
     receive_pc_cmd_voice_control_data.vw = (float)((Rx_data[24] << 0) |  // byte3? 31-24λ
-                                              (Rx_data[25] << 8) |  // byte2? 23-16λ
-                                              (Rx_data[26] << 16)  |  // byte1? 15-8λ
-                                              (Rx_data[27] << 24)) / 10000.0f;    // byte0? 7-0λ
+                                                   (Rx_data[25] << 8) |  // byte2? 23-16λ
+                                                   (Rx_data[26] << 16)  |  // byte1? 15-8λ
+                                                   (Rx_data[27] << 24)) / 10000.0f;    // byte0? 7-0λ
 }
 static void transmission_topic_pub_push(void)
 {
@@ -454,7 +454,7 @@ void ArmJointDataPack(void) {
 
     // 添加 gripper_state 和 auto_state
     memcpy(&usb_txbuffer[HEAD_BUF_LEN + USB_ARM_JOINTS_POS_DATA_LEN + USB_ARM_JOINTS_VEL_DATA_LEN ], &transmission_subscribe_arm_feedback_data.gripper_state, sizeof(int8_t));
-    memcpy(&usb_txbuffer[HEAD_BUF_LEN + USB_ARM_JOINTS_POS_DATA_LEN + USB_ARM_JOINTS_VEL_DATA_LEN + sizeof(int8_t) ], &transmission_subscribe_arm_feedback_data.arm_control_state, sizeof(int8_t));
+    usb_txbuffer[HEAD_BUF_LEN + USB_ARM_JOINTS_POS_DATA_LEN + USB_ARM_JOINTS_VEL_DATA_LEN + sizeof(int8_t) ] = 1; //不为1的话上位机不能初始化成功，所以强制发送0，目前不影响正常车的运动
     memcpy(&usb_txbuffer[HEAD_BUF_LEN + USB_ARM_JOINTS_POS_DATA_LEN + USB_ARM_JOINTS_VEL_DATA_LEN + 2 * sizeof(int8_t) ], &transmission_subscribe_arm_feedback_data.auto_ctrl_mode, sizeof(int8_t));
     // 计算校验码（覆盖0到最后一个数据字节）
     sum_check = 0;

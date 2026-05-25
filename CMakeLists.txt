@@ -144,7 +144,7 @@ include_directories(Core/Inc Drivers/STM32H7xx_HAL_Driver/Inc Drivers/STM32H7xx_
         USER/Task/Transmission
         USER/Task/USART
         USER/Task/ina226
-        USER/Task/Store
+
 )
 
 add_definitions(-DDEBUG -DUSE_HAL_DRIVER -DSTM32H723xx -DUSE_PWR_LDO_SUPPLY)
@@ -197,7 +197,7 @@ file(GLOB_RECURSE SOURCES "Core/*.*" "Middlewares/*.*" "Drivers/*.*" "USB_DEVICE
         "USER/Task/Transmission/*.*"
         "USER/Task/USART/*.*"
         "USER/Task/ina226/*.*"
-        "USER/Task/Store/*.*"
+
 
 )
 

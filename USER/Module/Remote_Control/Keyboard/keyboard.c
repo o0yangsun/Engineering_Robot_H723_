@@ -13,8 +13,7 @@
 #include "pump.h"
 #include "DMmotor_task.h"
 #include "cmd_task.h"
-#include "Auto_store.h"
-
+#include "tim.h"
 
 /* key acceleration time */
 #define KEY_ACC_TIME     2200  //ms
@@ -28,6 +27,12 @@ extern ramp_obj_t *km_vw_ramp; // 旋转控制斜坡，需在外部定义
 extern ramp_obj_t *nuc_km_vx_ramp;//x轴控制斜坡
 extern ramp_obj_t *nuc_km_vy_ramp;//y周控制斜坡
 extern ramp_obj_t *nuc_km_vw_ramp; // 旋转控制斜坡，需在外部定义
+
+//-------------储存罐参数--------------
+extern Auto_ctrl_mode auto_ctrl_mode;
+static uint8_t left_full[2] = {0};   // 左侧两个罐子是否有物体
+static uint8_t right_full[2] = {0};   // 右侧两个罐子
+//-------------储存罐参数--------------
 
 static float base_delta = 3.0f  / KEY_ACC_TIME;
 static float base_delta_w = MAX_CHASSIS_VW_SPEED  / KEY_ACC_TIME;
@@ -51,32 +56,30 @@ keyboard_control_t keyboard = {
         .vx = 0, .vy = 0, .vw = 0,
         .max_spd = 3000,
         .move_mode = NORMAL_MODE,
-        .shift = {KEY_RELEASE, 0, 500, 0},   // SHIFT长按500ms
-        .ctrl  = {KEY_RELEASE, 0, 500, 0},   // CTRL长按500ms
+        .shift = {KEY_RELEASE, 0, 500, 0},   // SHIFT长按800ms
+        .ctrl  = {KEY_RELEASE, 0, 500, 0},   // CTRL长按800ms
         .v     = {KEY_RELEASE, 0, 800, 0},   // V键短按800ms
-        .b     = {KEY_RELEASE, 0, 800, 0},   // B键短按800ms
-        .g     = {KEY_RELEASE, 0, 500, 0},   // G键长按500ms，触发右边Store
-        .f     = {KEY_RELEASE, 0, 500, 0},   // F键长按500ms，触发左边Store
-        .x     = {KEY_RELEASE, 0, 800, 0},
+        .b     = {KEY_RELEASE, 0, 800, 0},   // V键短按800ms
+        .g     = {KEY_RELEASE, 0, 800, 0},   // G键快速响应
+        .f     = {KEY_RELEASE, 0, 800, 0},    // F键快速响应
+        .x     = {KEY_RELEASE, 0, 800, 0},    // F键快速响应
         .z     = {KEY_RELEASE, 0, 800, 0},
-        .r     = {KEY_RELEASE, 0, 500, 0},   // R键长按500ms，触发放置左边
-        .c     = {KEY_RELEASE, 0, 500, 0}    // C键长按500ms，触发右边拿取
+        .r     = {KEY_RELEASE, 0, 800, 0}    // F键快速响应
 };
 
 keyboard_control_t nuc_keyboard = {
         .vx = 0, .vy = 0, .vw = 0,
         .max_spd = 3000,
         .move_mode = NORMAL_MODE,
-        .shift = {KEY_RELEASE, 0, 500, 0},
-        .ctrl  = {KEY_RELEASE, 0, 500, 0},
-        .v     = {KEY_RELEASE, 0, 800, 0},
-        .b     = {KEY_RELEASE, 0, 800, 0},
-        .g     = {KEY_RELEASE, 0, 500, 0},
-        .f     = {KEY_RELEASE, 0, 500, 0},
-        .x     = {KEY_RELEASE, 0, 800, 0},
+        .shift = {KEY_RELEASE, 0, 500, 0},   // SHIFT长按800ms
+        .ctrl  = {KEY_RELEASE, 0, 500, 0},   // CTRL长按800ms
+        .v     = {KEY_RELEASE, 0, 800, 0},   // V键短按800ms
+        .b     = {KEY_RELEASE, 0, 800, 0},   // V键短按800ms
+        .g     = {KEY_RELEASE, 0, 800, 0},   // G键快速响应
+        .f     = {KEY_RELEASE, 0, 800, 0},    // F键快速响应
+        .x     = {KEY_RELEASE, 0, 800, 0},    // F键快速响应
         .z     = {KEY_RELEASE, 0, 800, 0},
-        .r     = {KEY_RELEASE, 0, 500, 0},
-        .c     = {KEY_RELEASE, 0, 500, 0}
+        .r     = {KEY_RELEASE, 0, 800, 0}    // F键快速响应
 };
 mouse_control_t mouse = {0} ;
 
@@ -196,6 +199,20 @@ void PC_keyboard_mouse(const pc_control_t *pc_control)
         gripper_state = Gripper_CLOSE;
     }
 
+//    key_state_machine(&keyboard.g,pc_control->keyboard.bit.G);
+//    if (keyboard.g.state == KEY_PRESS_ONCE)
+//    {
+//        cmd_chassis.last_mode= cmd_chassis.ctrl_mode;
+//        cmd_chassis.ctrl_mode =CHASSIS_RELAX;
+//    }
+//
+//    key_state_machine(&keyboard.f,pc_control->keyboard.bit.F);
+//    if (keyboard.f.state == KEY_PRESS_ONCE)
+//    {
+//        cmd_chassis.last_mode= cmd_chassis.ctrl_mode;
+//        cmd_chassis.ctrl_mode=CHASSIS_ENABLE;
+//    }
+
     key_state_machine(&keyboard.b,pc_control->keyboard.bit.B);
     if (keyboard.b.state == KEY_PRESS_LONG)
     {
@@ -264,6 +281,12 @@ void PC_keyboard_mouse(const pc_control_t *pc_control)
         keyboard.vw *= (1 - km_vw_ramp->calc(km_vw_ramp) * decay);
     }
 
+//    // 死区处理
+//    if(fabs(keyboard.vx) < DEAD_ZONE) keyboard.vx = 0;
+//    if(fabs(keyboard.vy) < DEAD_ZONE) keyboard.vy = 0;
+//    if(fabs(keyboard.vw) < DEAD_ZONE) keyboard.vw = 0;
+
+
     VAL_LIMIT(keyboard.vx, -keyboard.max_spd, keyboard.max_spd);
     VAL_LIMIT(keyboard.vy, -keyboard.max_spd, keyboard.max_spd);
 
@@ -271,33 +294,14 @@ void PC_keyboard_mouse(const pc_control_t *pc_control)
     VAL_LIMIT(keyboard.vy, -MAX_CHASSIS_VY_SPEED, MAX_CHASSIS_VY_SPEED);
     VAL_LIMIT(keyboard.vw, -MAX_CHASSIS_VW_SPEED, MAX_CHASSIS_VW_SPEED);
 
-    /* R键长按500ms - 放置左边存储罐 */
-    key_state_machine(&keyboard.r, pc_control->keyboard.bit.R);
-    if (keyboard.r.state == KEY_PRESS_LONG && !auto_store_kb_trigger) {
-        auto_store_kb_target = AUTO_LEFT_PLACE;
-        auto_store_kb_trigger = 1;
-    }
 
-    /* F键长按500ms - 拿取左边存储罐 */
-    key_state_machine(&keyboard.f, pc_control->keyboard.bit.F);
-    if (keyboard.f.state == KEY_PRESS_LONG && !auto_store_kb_trigger) {
-        auto_store_kb_target = AUTO_LEFT_GRAB;
-        auto_store_kb_trigger = 1;
-    }
 
-    /* G键长按500ms - 放置右边存储罐 */
-    key_state_machine(&keyboard.g, pc_control->keyboard.bit.G);
-    if (keyboard.g.state == KEY_PRESS_LONG && !auto_store_kb_trigger) {
-        auto_store_kb_target = AUTO_RIGHT_PLACE;
-        auto_store_kb_trigger = 1;
-    }
-
-    /* C键长按500ms - 拿取右边存储罐 */
-    key_state_machine(&keyboard.c, pc_control->keyboard.bit.C);
-    if (keyboard.c.state == KEY_PRESS_LONG && !auto_store_kb_trigger) {
-        auto_store_kb_target = AUTO_RIGHT_GRAB;
-        auto_store_kb_trigger = 1;
-    }
+//    key_state_machine(&keyboard.r,pc_control->keyboard.bit.R);
+//    if (keyboard.r.state == KEY_PRESS_ONCE)
+//    {
+//        arm_cmd.last_mode = arm_cmd.ctrl_mode;
+//        arm_cmd.ctrl_mode = ARM_INIT;
+//    }
 }
 
 
@@ -315,19 +319,102 @@ void NUC_keyboard_mouse(const pc_control_t *pc_control)
         gripper_state = Gripper_CLOSE;
     }
 
+//    key_state_machine(&keyboard.g,pc_control->keyboard.bit.G);
+//    if (keyboard.g.state == KEY_PRESS_ONCE)
+//    {
+//        cmd_chassis.last_mode= cmd_chassis.ctrl_mode;
+//        cmd_chassis.ctrl_mode =CHASSIS_RELAX;
+//    }
+//
+//    key_state_machine(&keyboard.f,pc_control->keyboard.bit.F);
+//    if (keyboard.f.state == KEY_PRESS_ONCE)
+//    {
+//        cmd_chassis.last_mode= cmd_chassis.ctrl_mode;
+//        cmd_chassis.ctrl_mode=CHASSIS_ENABLE;
+//    }
+
+    //------------------------------------------储存罐控制-----------------------------------------
+
+
+    key_state_machine(&nuc_keyboard.g,pc_control->keyboard.bit.G);
+    key_state_machine(&nuc_keyboard.r,pc_control->keyboard.bit.R);
+    key_state_machine(&nuc_keyboard.f,pc_control->keyboard.bit.F);
     key_state_machine(&nuc_keyboard.b,pc_control->keyboard.bit.B);
-    if (nuc_keyboard.b.state == KEY_PRESS_LONG)
+
+// 左侧放置（原G键，右侧请自行调整）
+    if (nuc_keyboard.g.state == KEY_PRESS_LONG && auto_ctrl_mode == AUTO_WAIT)
     {
-        arm_cmd.last_mode = arm_cmd.ctrl_mode;
-        arm_cmd.ctrl_mode = ARM_DISABLE;
+        for (int i = 0; i < 2; i++)
+        {
+            if (!left_full[i])
+            {
+                left_full[i] = 1;
+                // 驱动对应舵机到工作位
+                __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, i ? 1833 : 500);//500-2500
+                auto_ctrl_mode = AUTO_LEFT_PLACE;
+                break;
+            }
+        }
+    }
+// 左侧抓取（原R键）
+    if (nuc_keyboard.r.state == KEY_PRESS_LONG && auto_ctrl_mode == AUTO_WAIT) {
+        for (int i = 0; i < 2; i++) {
+            if (left_full[i]) {
+                left_full[i] = 0;
+                // 驱动对应舵机到工作位
+                __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, i ?1833 : 500);//500-2500
+                auto_ctrl_mode = AUTO_LEFT_GRAB;
+                break;
+            }
+        }
     }
 
-    key_state_machine(&nuc_keyboard.v,pc_control->keyboard.bit.V);
-    if (nuc_keyboard.v.state == KEY_PRESS_LONG)
-    {
-        arm_cmd.last_mode = arm_cmd.ctrl_mode;
-        arm_cmd.ctrl_mode = ARM_ENABLE;
+    // 右侧放置（原F键）
+    if (nuc_keyboard.f.state == KEY_PRESS_LONG && auto_ctrl_mode == AUTO_WAIT) {
+        for (int i = 0; i < 2; i++) {
+            if (!right_full[i]) {
+                right_full[i] = 1;
+                // 驱动对应舵机到工作位
+                __HAL_TIM_SET_COMPARE(&htim1,  TIM_CHANNEL_3, i ? 1833 : 500);//500-2500
+                auto_ctrl_mode = AUTO_RIGHT_PLACE;
+                break;
+            }
+        }
     }
+
+// 右侧抓取（原B键）
+    if (nuc_keyboard.b.state == KEY_PRESS_LONG && auto_ctrl_mode == AUTO_WAIT) {
+        for (int i = 0; i < 2; i++) {
+            if (right_full[i]) {
+                right_full[i] = 0;
+                __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3 , i ? 1833 : 500);//500-2500
+                auto_ctrl_mode = AUTO_RIGHT_GRAB;
+                break;
+            }
+        }
+    }
+
+
+
+
+
+
+    //------------------------------------------储存罐控制-----------------------------------------
+
+
+//    key_state_machine(&nuc_keyboard.b,pc_control->keyboard.bit.B);
+//    if (nuc_keyboard.b.state == KEY_PRESS_LONG)
+//    {
+//        arm_cmd.last_mode = arm_cmd.ctrl_mode;
+//        arm_cmd.ctrl_mode = ARM_DISABLE;
+//    }
+//
+//    key_state_machine(&nuc_keyboard.v,pc_control->keyboard.bit.V);
+//    if (nuc_keyboard.v.state == KEY_PRESS_LONG)
+//    {
+//        arm_cmd.last_mode = arm_cmd.ctrl_mode;
+//        arm_cmd.ctrl_mode = ARM_ENABLE;
+//    }
 
     /* 模式优先级处理 */
     nuc_keyboard.move_mode = NORMAL_MODE;
@@ -354,6 +441,7 @@ void NUC_keyboard_mouse(const pc_control_t *pc_control)
 
     float decay = (nuc_keyboard.move_mode == SLOW_MODE) ?
                   MICRO_DECAY : NORMAL_DECAY;
+
 
     // 前后方向（W/S -> vy）
     if(pc_control->keyboard.bit.W) {
@@ -382,6 +470,12 @@ void NUC_keyboard_mouse(const pc_control_t *pc_control)
         nuc_keyboard.vw *= (1 -nuc_km_vw_ramp->calc(nuc_km_vw_ramp) * decay);
     }
 
+//    // 死区处理
+//    if(fabs(keyboard.vx) < DEAD_ZONE) keyboard.vx = 0;
+//    if(fabs(keyboard.vy) < DEAD_ZONE) keyboard.vy = 0;
+//    if(fabs(keyboard.vw) < DEAD_ZONE) keyboard.vw = 0;
+
+
     VAL_LIMIT(nuc_keyboard.vx, -nuc_keyboard.max_spd, nuc_keyboard.max_spd);
     VAL_LIMIT(nuc_keyboard.vy, -nuc_keyboard.max_spd, nuc_keyboard.max_spd);
 
@@ -389,31 +483,15 @@ void NUC_keyboard_mouse(const pc_control_t *pc_control)
     VAL_LIMIT(nuc_keyboard.vy, -MAX_CHASSIS_VY_SPEED, MAX_CHASSIS_VY_SPEED);
     VAL_LIMIT(nuc_keyboard.vw, -MAX_CHASSIS_VW_SPEED, MAX_CHASSIS_VW_SPEED);
 
-    /* R键长按500ms - 放置左边存储罐 */
-    key_state_machine(&nuc_keyboard.r, pc_control->keyboard.bit.R);
-    if (nuc_keyboard.r.state == KEY_PRESS_LONG && !auto_store_kb_trigger) {
-        auto_store_kb_target = AUTO_LEFT_PLACE;
-        auto_store_kb_trigger = 1;
-    }
 
-    /* F键长按500ms - 拿取左边存储罐 */
-    key_state_machine(&nuc_keyboard.f, pc_control->keyboard.bit.F);
-    if (nuc_keyboard.f.state == KEY_PRESS_LONG && !auto_store_kb_trigger) {
-        auto_store_kb_target = AUTO_LEFT_GRAB;
-        auto_store_kb_trigger = 1;
-    }
 
-    /* G键长按500ms - 放置右边存储罐 */
-    key_state_machine(&nuc_keyboard.g, pc_control->keyboard.bit.G);
-    if (nuc_keyboard.g.state == KEY_PRESS_LONG && !auto_store_kb_trigger) {
-        auto_store_kb_target = AUTO_RIGHT_PLACE;
-        auto_store_kb_trigger = 1;
-    }
-
-    /* C键长按500ms - 拿取右边存储罐 */
-    key_state_machine(&nuc_keyboard.c, pc_control->keyboard.bit.C);
-    if (nuc_keyboard.c.state == KEY_PRESS_LONG && !auto_store_kb_trigger) {
-        auto_store_kb_target = AUTO_RIGHT_GRAB;
-        auto_store_kb_trigger = 1;
-    }
+//    key_state_machine(&keyboard.r,pc_control->keyboard.bit.R);
+//    if (keyboard.r.state == KEY_PRESS_ONCE)
+//    {
+//        arm_cmd.last_mode = arm_cmd.ctrl_mode;
+//        arm_cmd.ctrl_mode = ARM_INIT;
+//    }
 }
+
+
+
