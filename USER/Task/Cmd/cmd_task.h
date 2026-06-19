@@ -21,6 +21,7 @@ typedef enum
 {
     User_defined_Controller, //自定义模式控制器
     PC_based_Controller,    //上位机控制
+    MCU_based_Controller    //下位机自动模式
 } Arm_mode_e;
 
 

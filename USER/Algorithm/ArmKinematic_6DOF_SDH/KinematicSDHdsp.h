@@ -17,7 +17,7 @@
 #define M_PI_2      1.57079632679489661923f
 #endif
 // 弧度转角度常量
-#define RAD_TO_DEG  57.295777754771045f
+#define RAD_TO_DEG_FACTOR  57.295777754771045f
 
 // DSP库加速运算
 #define cosf(x) arm_cos_f32(x)
@@ -31,26 +31,11 @@
 #define Matrix_Transpose arm_mat_trans_f32// 矩阵转置
 #define Matrix_Inverse arm_mat_inverse_f32// 矩阵求逆
 
-#define MOTOR_6_MIN_LIMIT (-0.654f)
-#define MOTOR_6_MAX_LIMIT (0.654f)
 
-#define MOTOR_5_MIN_LIMIT (-0.4f)
-#define MOTOR_5_MAX_LIMIT (1.5f)
 
-#define MOTOR_4_MIN_LIMIT (-3.14f)
-#define MOTOR_4_MAX_LIMIT ( 3.14f)
 
-#define MOTOR_3_MIN_LIMIT (-0.01f)
-#define MOTOR_3_MAX_LIMIT (3.14f)
-
-#define MOTOR_2_MIN_LIMIT (-2.1f)
-#define MOTOR_2_MAX_LIMIT (0.01f)
-
-#define MOTOR_1_MIN_LIMIT (-2.4f)
-#define MOTOR_1_MAX_LIMIT ( 2.4f)
-
-#define POSITION_TOLERANCE  (1e-3f)
-#define ORIENTATION_TOLERANCE (1e-3f)
+#define POSITION_TOLERANCE  (1e-2f)
+#define ORIENTATION_TOLERANCE (1e-2f)
 
 typedef struct {
     // 此处按理来说应该是theta，但由于机械编码器安装错位或者反相，可能导致多一个或者少一个PI/2的偏置补偿

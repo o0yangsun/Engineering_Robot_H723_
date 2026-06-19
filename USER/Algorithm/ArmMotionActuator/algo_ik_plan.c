@@ -108,7 +108,7 @@ static float update_time_scale(const JointMoveJPlanner_t *jp,
 
     z = eq_n + lambda * ev_n;
     scale_raw = scale_min + (1.0f - scale_min) / (1.0f + k * z);
-    scale = scale_prev + alpha * (scale_raw - scale_prev);
+    scale = scale_prev + alpha * (scale_raw - scale_prev);//低通滤波
 
     if (scale < scale_min) scale = scale_min;
     if (scale > 1.0f)      scale = 1.0f;
@@ -144,7 +144,7 @@ static bool MoveJ_StartFromCurrentFeedback(void)
         return false;
     }
 
-    // USART7_DebugPrintf("[MoveJ] start ok, total_time=%.3f\r\n", g_algo.planner.movej.prof.total_time);
+    USART7_DebugPrintf("[MoveJ] start ok, total_time=%.3f\r\n", g_algo.planner.movej.prof.total_time);
 
 
     return true;
@@ -174,10 +174,10 @@ static void Algorithm_HandlePoseCommand(void)
         return;
     }
 
-//    USART7_DebugPrintf("[Pose %lu] target = xyz(%.4f, %.4f, %.4f) ryp(%.4f, %.4f, %.4f)\r\n",
-//                       (unsigned long)pose_seq_local,
-//                       pose_local.X, pose_local.Y, pose_local.Z,
-//                       pose_local.ROLL, pose_local.YAW, pose_local.PITCH);
+    USART7_DebugPrintf("[Pose %lu] target = xyz(%.4f, %.4f, %.4f) ryp(%.4f, %.4f, %.4f)\r\n",
+                       (unsigned long)pose_seq_local,
+                       pose_local.X, pose_local.Y, pose_local.Z,
+                       pose_local.ROLL, pose_local.YAW, pose_local.PITCH);
 
     memset(g_algo.pose_plan.ik_cands, 0, sizeof(g_algo.pose_plan.ik_cands));
     g_algo.pose_plan.ik_cand_count = 0;
@@ -194,13 +194,13 @@ static void Algorithm_HandlePoseCommand(void)
         g_algo.pose_plan.last_ik_seq = pose_seq_local;
         g_algo.pose_plan.cmd_state = ALGO_CMD_IK_OK;
 
-//        USART7_DebugPrintf("[Pose %lu] IK ok, cand=%d\r\n",
-//                           (unsigned long)pose_seq_local,
-//                           g_algo.pose_plan.ik_cand_count);
-//        USART7_DebugPrintf("[Pose %lu] qik= %.3f %.3f %.3f %.3f %.3f %.3f\r\n",
-//                           (unsigned long)pose_seq_local,
-//                           g_algo.pose_plan.q_ik_target[0], g_algo.pose_plan.q_ik_target[1], g_algo.pose_plan.q_ik_target[2],
-//                           g_algo.pose_plan.q_ik_target[3], g_algo.pose_plan.q_ik_target[4], g_algo.pose_plan.q_ik_target[5]);
+        USART7_DebugPrintf("[Pose %lu] IK ok, cand=%d\r\n",
+                           (unsigned long)pose_seq_local,
+                           g_algo.pose_plan.ik_cand_count);
+        USART7_DebugPrintf("[Pose %lu] qik= %.3f %.3f %.3f %.3f %.3f %.3f\r\n",
+                           (unsigned long)pose_seq_local,
+                           g_algo.pose_plan.q_ik_target[0], g_algo.pose_plan.q_ik_target[1], g_algo.pose_plan.q_ik_target[2],
+                           g_algo.pose_plan.q_ik_target[3], g_algo.pose_plan.q_ik_target[4], g_algo.pose_plan.q_ik_target[5]);
 
         memcpy(g_algo.planner.q_target,
                g_algo.pose_plan.q_ik_target,
@@ -267,7 +267,8 @@ static void Algorithm_HandlePlannerStep(float dt)
         g_algo.planner.time_scale = update_time_scale(&g_algo.planner.movej,
                                                       g_algo.feedback.q_fb,
                                                       g_algo.feedback.v_fb,
-                                                      g_algo.planner.time_scale);
+                                                      g_algo.planner.time_scale);//根据误差动态变化缩放因子到[0.15-1]
+
 
         dt_eff = dt * g_algo.planner.time_scale;
 
@@ -278,13 +279,15 @@ static void Algorithm_HandlePlannerStep(float dt)
         }
         else
         {
-            g_algo.planner.track_print_div++;
-            if (g_algo.planner.track_print_div >= 50)
+            g_algo.planner.track_print_div++;//分时间隔打印信息
+            if (g_algo.planner.track_print_div >= 500)
             {
                 g_algo.planner.track_print_div = 0;
-                USART7_DebugPrintf("[Track] qfb= %.3f %.3f %.3f | qref= %.3f %.3f %.3f\r\n",
-                                   g_algo.feedback.q_fb[0], g_algo.feedback.q_fb[1], g_algo.feedback.q_fb[2],
-                                   g_algo.planner.movej.q_ref[0], g_algo.planner.movej.q_ref[1], g_algo.planner.movej.q_ref[2]);
+                USART7_DebugPrintf("[Track] qfb= %.3f %.3f %.3f %.3f %.3f %.3f| qref= %.3f %.3f %.3f %.3f %.3f %.3f\r\n",
+                                   g_algo.feedback.q_fb[0], g_algo.feedback.q_fb[1], g_algo.feedback.q_fb[2],g_algo.feedback.q_fb[3], g_algo.feedback.q_fb[4], g_algo.feedback.q_fb[5],
+                                   g_algo.planner.movej.q_ref[0], g_algo.planner.movej.q_ref[1], g_algo.planner.movej.q_ref[2],g_algo.planner.movej.q_ref[3], g_algo.planner.movej.q_ref[4], g_algo.planner.movej.q_ref[5]);
+
+                USART7_DebugPrintf("[MoveJ] time_scale: %f\r\n",g_algo.planner.time_scale);
             }
         }
     }
@@ -297,7 +300,7 @@ static void Algorithm_HandlePlannerStep(float dt)
 /* ---------------------------- 对外接口实现 ---------------------------- */
 void Algo_InitContext(void)
 {
-    Kinematic_MapInit();
+    Kinematic_MapInit();//初始化模型，修正机械零点和电器零点的误差和方向
 
     memset(&g_algo, 0, sizeof(g_algo));
 
@@ -312,14 +315,14 @@ void Algo_InitContext(void)
         g_algo.planner.amax[i] = PLAN_AMAX;
     }
 
-    g_algo.planner.time_scale = 1.0f;
+    g_algo.planner.time_scale = 1.0f;//时间缩放因子 1为正常
     g_algo.planner.track_print_div = 0;
     g_algo.planner.movej_cmd_pending = 0;
 
     /* pose/IK */
     g_algo.pose_plan.wrist_offset[0] = wrist_toll_offset[0];
     g_algo.pose_plan.wrist_offset[1] =  wrist_toll_offset[1];
-    g_algo.pose_plan.wrist_offset[2] =  wrist_toll_offset[2];  // 腕部偏置 + Tool偏置
+    g_algo.pose_plan.wrist_offset[2] =  wrist_toll_offset[2];  // 腕部偏置（关节5和关节6坐标系原点的距离直线） + Tool偏置（joint6原点到工具中心点的距离）
 
     g_algo.pose_plan.origin_valid = 0;
     g_algo.pose_plan.cmd_state = ALGO_CMD_IDLE;
@@ -342,11 +345,11 @@ void Algo_SetFeedback(const AlgoFeedback_t *fb)
         Pose6D_t pose6_now;
         Pose6D_t tcp_now;
 
-        if (SDH_FK_FromEnc(g_algo.feedback.q_fb, &pose6_now))
+        if (SDH_FK_FromEnc(g_algo.feedback.q_fb, &pose6_now))//将角度传入,通过正运动学得出joint6新坐标系相对于基座标系得xyz三维坐标和旋转的角度
         {
             Pose_AddOffsetInFrame6(&pose6_now,
                                    g_algo.pose_plan.wrist_offset,
-                                   &tcp_now);
+                                   &tcp_now);//将偏置角度转到基座标系上后加到末端地方上
 
             g_algo.pose_plan.origin_tcp_pose = tcp_now;
             g_algo.pose_plan.origin_valid = 1;
@@ -404,9 +407,9 @@ bool Algo_PostPoseTargetXYZRYP_Rad(float x, float y, float z,
 
 void Algo_Step(float dt)
 {
-    Algorithm_HandlePoseCommand();
-    Algorithm_HandleMoveJStart();
-    Algorithm_HandlePlannerStep(dt);
+    Algorithm_HandlePoseCommand();//通过目标点解得出最优的一组关节目标角度
+    Algorithm_HandleMoveJStart();//得出让所有关节一起运动一起停止的时间和加减速段的时间和匀速段时间和每个关节运动的速度和加速度
+    Algorithm_HandlePlannerStep(dt);//通过dt得出下一进程需要发布的目标值和角度
 }
 
 void Algo_GetOutput(AlgoOutput_t *out)

@@ -374,6 +374,16 @@ void fdcan2_process_callback(void)
     // 获取电机ID号
     rec_id = (rx_data[0]) & 0x0F;
     switch (rec_id) {
+//        case 0x01: {
+//            // 调用关节电机解包函数，解出位置速度和力矩的值，并存入到对应的结构体中
+//            dm_motor_fbdata(&motor[Motor1], rx_data);
+//            break;
+//        }
+//        case 0x02: {
+//            // 调用关节电机解包函数，解出位置速度和力矩的值，并存入到对应的结构体中
+//            dm_motor_fbdata(&motor[Motor2], rx_data);
+//            break;
+//        }
         case 0x03: {
             // 调用关节电机解包函数，解出位置速度和力矩的值，并存入到对应的结构体中
             dm_motor_fbdata(&motor[Motor3], rx_data);

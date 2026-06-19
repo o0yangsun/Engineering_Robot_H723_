@@ -350,7 +350,7 @@ void NUC_keyboard_mouse(const pc_control_t *pc_control)
             {
                 left_full[i] = 1;
                 // 驱动对应舵机到工作位
-                __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, i ? 1833 : 500);//500-2500
+                __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, i ? 1833 : 500);//500-2500
                 auto_ctrl_mode = AUTO_LEFT_PLACE;
                 break;
             }
@@ -362,7 +362,7 @@ void NUC_keyboard_mouse(const pc_control_t *pc_control)
             if (left_full[i]) {
                 left_full[i] = 0;
                 // 驱动对应舵机到工作位
-                __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, i ?1833 : 500);//500-2500
+                __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, i ?1833 : 500);//500-2500
                 auto_ctrl_mode = AUTO_LEFT_GRAB;
                 break;
             }
@@ -375,7 +375,7 @@ void NUC_keyboard_mouse(const pc_control_t *pc_control)
             if (!right_full[i]) {
                 right_full[i] = 1;
                 // 驱动对应舵机到工作位
-                __HAL_TIM_SET_COMPARE(&htim1,  TIM_CHANNEL_3, i ? 1833 : 500);//500-2500
+                __HAL_TIM_SET_COMPARE(&htim1,  TIM_CHANNEL_1, i ? 1833 : 500);//500-2500
                 auto_ctrl_mode = AUTO_RIGHT_PLACE;
                 break;
             }
@@ -387,16 +387,12 @@ void NUC_keyboard_mouse(const pc_control_t *pc_control)
         for (int i = 0; i < 2; i++) {
             if (right_full[i]) {
                 right_full[i] = 0;
-                __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3 , i ? 1833 : 500);//500-2500
+                __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1 , i ? 1833 : 500);//500-2500
                 auto_ctrl_mode = AUTO_RIGHT_GRAB;
                 break;
             }
         }
     }
-
-
-
-
 
 
     //------------------------------------------储存罐控制-----------------------------------------

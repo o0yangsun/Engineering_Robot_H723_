@@ -101,6 +101,9 @@ void CmdTask_Entry(void const * argument)
     nuc_km_vy_ramp = ramp_register(0, 200);  // 0 -2的累加次数
     nuc_km_vw_ramp = ramp_register(0, 200);
 
+    __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1, 500);//初始化储存罐
+    __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_3, 500);//初始化储存罐
+
     /* 获取原始键盘数据 */
     memset(&pc_data, 0, sizeof(pc_control_t));
     memset(&keyboard, 0, sizeof(keyboard_control_t));
@@ -199,11 +202,11 @@ void remote_to_cmd_sbus(void) {
     if (vt13_remote_parsed_data_fdb.online) {
         // 新遥控器（vt13）通道映射
         cmd_chassis.vx = (vt13_remote_parsed_data_fdb.ch[1] * CHASSIS_VT13_RC_MOVE_RATIO_X / VT13_RC_MAX_VALUE
-                          + keyboard.vx * CHASSIS_PC_MOVE_RATIO_Y + pc_cmd_data.vx+receive_pc_cmd_voice_control_data.vx + nuc_keyboard.vx * CHASSIS_PC_MOVE_RATIO_X);
+                          + keyboard.vx * CHASSIS_PC_MOVE_RATIO_Y +receive_pc_cmd_voice_control_data.vx + nuc_keyboard.vx * CHASSIS_PC_MOVE_RATIO_X);
         cmd_chassis.vy = (vt13_remote_parsed_data_fdb.ch[3] * CHASSIS_VT13_RC_MOVE_RATIO_Y / VT13_RC_MAX_VALUE
-                          + keyboard.vy * CHASSIS_PC_MOVE_RATIO_X + pc_cmd_data.vy+receive_pc_cmd_voice_control_data.vy + nuc_keyboard.vy * CHASSIS_PC_MOVE_RATIO_Y);
+                          + keyboard.vy * CHASSIS_PC_MOVE_RATIO_X +receive_pc_cmd_voice_control_data.vy + nuc_keyboard.vy * CHASSIS_PC_MOVE_RATIO_Y);
         cmd_chassis.vw = (vt13_remote_parsed_data_fdb.ch[0] * CHASSIS_VT13_RC_MOVE_RATIO_W / VT13_RC_MAX_VALUE
-                          + keyboard.vw * CHASSIS_PC_MOVE_RATIO_W + pc_cmd_data.vw+receive_pc_cmd_voice_control_data.vw + nuc_keyboard.vw * CHASSIS_PC_MOVE_RATIO_W);
+                          + keyboard.vw * CHASSIS_PC_MOVE_RATIO_W +receive_pc_cmd_voice_control_data.vw + nuc_keyboard.vw * CHASSIS_PC_MOVE_RATIO_W);
 
         if (vt13_remote_parsed_data_fdb.mode_sw == 0)//夹爪控制模式
         {
@@ -228,17 +231,17 @@ void remote_to_cmd_sbus(void) {
     } else {
         // 原SBUS遥控器数据（保持原有逻辑）
         cmd_chassis.vx = (sbus_data_fdb.ch2 * CHASSIS_RC_MOVE_RATIO_X / RC_MAX_VALUE
-                          + keyboard.vx * CHASSIS_PC_MOVE_RATIO_X + pc_cmd_data.vx+receive_pc_cmd_voice_control_data.vx + nuc_keyboard.vx * CHASSIS_PC_MOVE_RATIO_X);
+                          + keyboard.vx * CHASSIS_PC_MOVE_RATIO_X +receive_pc_cmd_voice_control_data.vx + nuc_keyboard.vx * CHASSIS_PC_MOVE_RATIO_X);
         cmd_chassis.vy = (sbus_data_fdb.ch4 * CHASSIS_RC_MOVE_RATIO_Y / RC_MAX_VALUE
-                          + keyboard.vy * CHASSIS_PC_MOVE_RATIO_Y + pc_cmd_data.vy+receive_pc_cmd_voice_control_data.vy + nuc_keyboard.vy * CHASSIS_PC_MOVE_RATIO_Y);
+                          + keyboard.vy * CHASSIS_PC_MOVE_RATIO_Y +receive_pc_cmd_voice_control_data.vy + nuc_keyboard.vy * CHASSIS_PC_MOVE_RATIO_Y);
         cmd_chassis.vw = (sbus_data_fdb.ch1 * CHASSIS_RC_MOVE_RATIO_W / RC_MAX_VALUE
-                          + keyboard.vw * CHASSIS_PC_MOVE_RATIO_W + pc_cmd_data.vw+receive_pc_cmd_voice_control_data.vw + nuc_keyboard.vw * CHASSIS_PC_MOVE_RATIO_W);
+                          + keyboard.vw * CHASSIS_PC_MOVE_RATIO_W +receive_pc_cmd_voice_control_data.vw + nuc_keyboard.vw * CHASSIS_PC_MOVE_RATIO_W);
         // 原SBUS遥控器泵模式控制（保持原有逻辑）
         if (sbus_data_fdb.sw3 == RC_MI) {
             gripper_state = Gripper_OPEN;
         } else if (sbus_data_fdb.sw3 == RC_DN) {
             gripper_state = Gripper_CLOSE;
-        }
+        }//这里把RC_UP换成RC_MI是因为加入了上位机,如果用UP会导致如果不注意把拨杆拨到中间,上位机控制不了夹爪关闭
 
         if (sbus_data_fdb.sw2 == RC_UP) {
             cmd_chassis.ctrl_mode = CHASSIS_ENABLE;

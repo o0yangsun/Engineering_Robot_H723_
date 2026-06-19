@@ -33,7 +33,7 @@ bool TrajTimeSync_Start(SpeedTimeSYNC_t *profile, float v_max, float a_max)
     profile->use_triangle_profile = 0;
     profile->running = 1;
 
-    /* 假设可以跑到最大速度 */
+    /* 假设可以跑到最大速度所需的最大时间 */
     accel_time_candidate = v_max / a_max;
 
     /* 对应加速段进度 */
@@ -55,7 +55,7 @@ bool TrajTimeSync_Start(SpeedTimeSYNC_t *profile, float v_max, float a_max)
     {
         /* 三角速度轨迹 */
         profile->use_triangle_profile = 1;
-        profile->accel_time = sqrtf(TIME_SYNC_TOTAL_PROGRESS / a_max);
+        profile->accel_time = sqrtf(TIME_SYNC_TOTAL_PROGRESS / a_max);  //1=2*0.5*a*t?  -> t=sqrtf(1/a)
         profile->accel_end_progress =
                 0.5f * a_max * profile->accel_time * profile->accel_time;
         profile->peak_progress_vel = a_max * profile->accel_time;
