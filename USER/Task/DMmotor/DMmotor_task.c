@@ -31,6 +31,9 @@ static int8_t pc_ctrl_process_last_state;
 static dm_arm_feedback_msg_t dm_arm_feedback_pub_msg = {0};
 static publisher_t *publish_dm_arm_feedback_topic = NULL;
 static subscriber_t *publish_dm_arm_ctrl_mode_topic = NULL;
+static subscriber_t *publish_gripper_ctrl_mode_topic = NULL;
+static subscriber_t *publish_mcu_gripper_ctrl_mode_topic = NULL;
+
 extern sbus_data_t sbus_data_fdb;
 
 static void DMmotor_topic_pub_init(void);
@@ -45,7 +48,7 @@ static float DMmotor_task_delta = 0;    // 监测线程运行时间
 static float DMmotor_task_start_dt = 0; // 监测线程开始时间
 /* -------------------------------- 调试监测线程相关 --------------------------------- */
 
-int test_git =1;
+
 static pid_obj_t *execute_track_movej_planner_pid;
 static pid_config_t execute_track_movej_config = INIT_PID_CONFIG(0.45, 0.0, 0.012, 0.0, 4.3, PID_Trapezoid_Intergral);
 
@@ -53,7 +56,10 @@ static float current_angle[6] = {0.0f};        // 实际的关节输出角度，
 static float dm_angles[6] = {0.0f};   // 队列读取值
 static float dm_pc_motor_angles[6] = {0.0f};   // 期望角度值
 static float dm_user_motor_angles[6] = {0.0f};   // 期望角度值
+
 Gripper_mode_e gripper_state = Gripper_OPEN;
+Gripper_mode_e mcu_gripper_state = Gripper_OPEN;
+
 //User_defined_Controller, //自定义模式控制器
 //PC_based_Controller,    //上位机控制
 static Arm_mode_e arm_control_state = User_defined_Controller;
@@ -83,9 +89,9 @@ struct arm_cmd_msg arm_cmd = {
 
 void arm_mode_change_init_process(float motor_angle[6])
 {
-    test_git = 666;
+
     dm_motor_enable(&hfdcan3, &motor[Motor1]);
-    vTaskDelay(400); // 延时，等待电机稳定
+    vTaskDelay(200); // 延时，等待电机稳定
     pos_ctrl(&hfdcan3, motor[Motor1].id, -motor_angle[0]/57.3f, 0.5f); // 发送控制命令
     vTaskDelay(200); // 延时，等待电机稳定
 
@@ -194,9 +200,10 @@ static subscriber_t *subscribe_movej_ref_topic;
 static movej_ref_msg_t dmmotor_subscribe_movej_ref_data;
 static uint32_t dmmotor_last_movej_seq = 0;
 
-float Kp_track = 2.7f;      // 先从小值开始调
+float Kp_track = 4.0f;      // 先从小值开始调
 float Kv_track = 0.95f;
-
+float pos_cmd[6];
+float vel_cmd[6];
 static void DMmotor_apply_movej_ref(const movej_ref_msg_t *ref)
 {
     float pos_fdb[6];
@@ -205,10 +212,9 @@ static void DMmotor_apply_movej_ref(const movej_ref_msg_t *ref)
     float pos_err[6];
     float vel_err[6];
 
-    float pos_cmd[6];
-    float vel_cmd[6];
 
-    const float v_min_follow = 0.4f; // 有误差时最小追赶速度
+
+    const float v_min_follow = 0.5f; // 有误差时最小追赶速度
     const float v_max_exec   = 6.0f;  // 执行层最大速度
     const float pos_tol      = 0.01f; // 约 0.57 度
     /* 无效轨迹，不发送 */
@@ -389,17 +395,16 @@ void DMmotorTask_Entry(void const * argument)
     arm_cmd.last_mode = ARM_ENABLE;
     vTaskDelay(1000); // 延时，等待电机稳定
 
-    dm_feedback_cache_update();
     pos_ctrl(&hfdcan3, motor[Motor1].id, 0, 1.0f); // 发送控制命令
-    vTaskDelay(1); // 延时，等待电机稳定
+    vTaskDelay(100); // 延时，等待电机稳定
 
     pos_ctrl(&hfdcan3, motor[Motor2].id, 0, 1.0f); // 发送控制命令
-    vTaskDelay(1); // 延时，等待电机稳定
+    vTaskDelay(100); // 延时，等待电机稳定
 
     for(int i=2;i<6;i++)
     {
         pos_ctrl(&hfdcan2, motor[i].id, 0, 1.0f); // 发送控制命令
-        vTaskDelay(1); // 延时，等待电机稳定
+        vTaskDelay(100); // 延时，等待电机稳定
     }
 
 
@@ -426,13 +431,13 @@ void DMmotorTask_Entry(void const * argument)
 
 /* -------------------------------- 线程代码编写段落 ------------------------------- */
 
-//        if (xQueueReceive(xControlQueue, dm_angles, 0) == pdPASS)
-//        {
-//            for(uint8_t i=0;i<6;i++)
-//            {
-//                dm_user_motor_angles[i] = dm_angles[i];
-//            }
-//        }
+        if (xQueueReceive(xControlQueue, dm_angles, 0) == pdPASS)
+        {
+            for(uint8_t i=0;i<6;i++)
+            {
+                dm_user_motor_angles[i] = dm_angles[i];
+            }
+        }
 //        if(dm_arm_feedback_pub_msg.arm_control_state == User_defined_Controller && arm_control_last_state != dm_arm_feedback_pub_msg.arm_control_state)
 //        {
 //            arm_mode_change_init_process(dm_user_motor_angles);
@@ -474,17 +479,20 @@ void DMmotorTask_Entry(void const * argument)
 //        }
 
 
-
-        if (dmmotor_subscribe_movej_ref_data.seq != dmmotor_last_movej_seq)
-        {
-            dmmotor_last_movej_seq = dmmotor_subscribe_movej_ref_data.seq;
-
-            if (dmmotor_subscribe_movej_ref_data.valid)
+//        if(dm_arm_feedback_pub_msg.arm_control_state == MCU_based_Controller)
+//        {
+            if (dmmotor_subscribe_movej_ref_data.seq != dmmotor_last_movej_seq)
             {
-                DMmotor_apply_movej_ref(&dmmotor_subscribe_movej_ref_data);
+                dmmotor_last_movej_seq = dmmotor_subscribe_movej_ref_data.seq;
+
+                if (dmmotor_subscribe_movej_ref_data.valid)
+                {
+                    DMmotor_apply_movej_ref(&dmmotor_subscribe_movej_ref_data);
+                }
             }
-        }
-        DMcontrol_motor_7(&hfdcan2,gripper_state);//夹爪控制//一键夹取功能
+            DMcontrol_motor_7(&hfdcan2, mcu_gripper_state);//夹爪控制//一键夹取功能
+//        }
+
 /* -------------------------------- 线程代码编写段落 ------------------------------- */
 
 /* -------------------------------- 线程发布Topics信息 ------------------------------- */
@@ -513,6 +521,8 @@ static void DMmotor_topic_sub_init(void)
     subscribe_cmd_pc_arm_topic = sub_register("pc_cmd_arm_pub",sizeof(struct pc_cmd_arm_msg));
     subscribe_movej_ref_topic = sub_register("movej_ref_pub", sizeof(movej_ref_msg_t));
     publish_dm_arm_ctrl_mode_topic = sub_register("dm_arm_ctrl_mode", sizeof(Arm_mode_e));
+    publish_gripper_ctrl_mode_topic = sub_register("gripper_ctrl_mode", sizeof(Gripper_mode_e ));
+    publish_mcu_gripper_ctrl_mode_topic = sub_register("MCU_gripper_ctrl_mode", sizeof(Gripper_mode_e ));
 }
 
 /**
@@ -531,6 +541,8 @@ static void DMmotor_topic_sub_pull(void)
     sub_get_msg(subscribe_cmd_pc_arm_topic, &dm_receive_pc_cmd_arm_msg_data);
     sub_get_msg(subscribe_movej_ref_topic, &dmmotor_subscribe_movej_ref_data);
     sub_get_msg(publish_dm_arm_ctrl_mode_topic, &arm_control_state);
+    sub_get_msg(publish_gripper_ctrl_mode_topic, &gripper_state);
+    sub_get_msg(publish_mcu_gripper_ctrl_mode_topic, &mcu_gripper_state);
 }
 /* -------------------------------- 线程间通讯Topics相关 ------------------------------- */
 

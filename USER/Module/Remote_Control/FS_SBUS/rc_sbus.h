@@ -9,7 +9,7 @@
 #define SBUS_HEAD 0X0F
 #define SBUS_END 0X00
 #define SBUS_RX_BUF_SIZE (25+25+12+4) //41
-
+#define IoT_RX_BUF_SIZE (1+4+1) //6
 
 /**
   * @brief 遥控器拨杆值

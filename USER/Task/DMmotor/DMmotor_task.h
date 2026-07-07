@@ -21,8 +21,8 @@
 
 
 // 五号电机的角度限制
-#define MOTOR_5_MIN_LIMIT (-1.57f)  //  5号电机转动 1圈，末端齿轮转动 1.5556圈,限幅九十度
-#define MOTOR_5_MAX_LIMIT (1.57f)
+#define MOTOR_5_MIN_LIMIT (-1.65f)  //  5号电机转动 1圈，末端齿轮转动 1.5556圈,限幅九十度
+#define MOTOR_5_MAX_LIMIT (1.65f)
 
 // 四号电机的角度限制
 #define MOTOR_4_MIN_LIMIT (-3.14f)  // 最多3.14

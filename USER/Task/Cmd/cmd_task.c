@@ -1,4 +1,4 @@
-/**
+﻿/**
   ******************************************************************************
   * @file    algorithm_task.c
   * @author  Liu JiaJun(187353224@qq.com)
@@ -40,6 +40,7 @@ static struct pc_cmd_voice_control_msg receive_pc_cmd_voice_control_data;
 static publisher_t *chassis_cmd_pub;
 static subscriber_t *pc_cmd_sub;
 static publisher_t *dm_arm_ctrl_mode_pub;
+static publisher_t *gripper_ctrl_mode_pub;
 static subscriber_t *pc_cmd_voice_control_subscriber;
 static subscriber_t *nuc_keyboard_subscriber;
 static void cmd_pub_init(void);
@@ -62,13 +63,11 @@ extern keyboard_control_t nuc_keyboard;
 extern vt13_remote_parsed_data_t vt13_remote_parsed_data_fdb;
 static pc_control_t pc_data;
 static pc_control_t nuc_data;
-static Arm_mode_e dm_arm_ctrl_mode;
 
+static Arm_mode_e dm_arm_ctrl_mode;
+static Gripper_mode_e gripper_ctrl_mode;
 extern struct referee_fdb_msg referee_fdb;
 struct cmd_chassis_msg cmd_chassis;
-extern Gripper_mode_e gripper_state ;
-
-
 
 /* 外部变量声明 */
 /*键盘加速度的斜坡*/
@@ -101,8 +100,6 @@ void CmdTask_Entry(void const * argument)
     nuc_km_vy_ramp = ramp_register(0, 200);  // 0 -2的累加次数
     nuc_km_vw_ramp = ramp_register(0, 200);
 
-    __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1, 500);//初始化储存罐
-    __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_3, 500);//初始化储存罐
 
     /* 获取原始键盘数据 */
     memset(&pc_data, 0, sizeof(pc_control_t));
@@ -157,6 +154,7 @@ static void cmd_pub_init(void)
 {
     chassis_cmd_pub = pub_register("chassis_cmd_pub", sizeof(struct cmd_chassis_msg));
     dm_arm_ctrl_mode_pub = pub_register("dm_arm_ctrl_mode", sizeof(Arm_mode_e));
+    gripper_ctrl_mode_pub = pub_register("gripper_ctrl_mode", sizeof(Gripper_mode_e));
 }
 
 
@@ -187,6 +185,7 @@ static void cmd_pub_push(void)
 {
     pub_push_msg(chassis_cmd_pub,&cmd_chassis);
     pub_push_msg(dm_arm_ctrl_mode_pub, &dm_arm_ctrl_mode);
+    pub_push_msg(gripper_ctrl_mode_pub, &gripper_ctrl_mode);
 }
 
 /* -------------------------------- 线程间通讯Topics相关 ------------------------------- */
@@ -210,11 +209,11 @@ void remote_to_cmd_sbus(void) {
 
         if (vt13_remote_parsed_data_fdb.mode_sw == 0)//夹爪控制模式
         {
-            gripper_state =Gripper_OPEN ;
+            gripper_ctrl_mode =Gripper_OPEN ;
         }
         else if(vt13_remote_parsed_data_fdb.mode_sw == 2)
         {
-            gripper_state =Gripper_CLOSE;
+            gripper_ctrl_mode =Gripper_CLOSE;
         }
         //底盘失使能
         if(vt13_remote_parsed_data_fdb.fn_1 && !fn_1_last_state)
@@ -229,6 +228,13 @@ void remote_to_cmd_sbus(void) {
         }
         fn_2_last_state = vt13_remote_parsed_data_fdb.fn_2;
     } else {
+        if (sbus_data_fdb.sw3 == RC_UP) {
+            dm_arm_ctrl_mode=User_defined_Controller;
+        } else if (sbus_data_fdb.sw3 == RC_MI) {
+            dm_arm_ctrl_mode=PC_based_Controller;
+        } else if (sbus_data_fdb.sw3 == RC_DN) {
+            dm_arm_ctrl_mode=MCU_based_Controller;
+        }
         // 原SBUS遥控器数据（保持原有逻辑）
         cmd_chassis.vx = (sbus_data_fdb.ch2 * CHASSIS_RC_MOVE_RATIO_X / RC_MAX_VALUE
                           + keyboard.vx * CHASSIS_PC_MOVE_RATIO_X +receive_pc_cmd_voice_control_data.vx + nuc_keyboard.vx * CHASSIS_PC_MOVE_RATIO_X);
@@ -237,11 +243,14 @@ void remote_to_cmd_sbus(void) {
         cmd_chassis.vw = (sbus_data_fdb.ch1 * CHASSIS_RC_MOVE_RATIO_W / RC_MAX_VALUE
                           + keyboard.vw * CHASSIS_PC_MOVE_RATIO_W +receive_pc_cmd_voice_control_data.vw + nuc_keyboard.vw * CHASSIS_PC_MOVE_RATIO_W);
         // 原SBUS遥控器泵模式控制（保持原有逻辑）
-        if (sbus_data_fdb.sw3 == RC_MI) {
-            gripper_state = Gripper_OPEN;
-        } else if (sbus_data_fdb.sw3 == RC_DN) {
-            gripper_state = Gripper_CLOSE;
-        }//这里把RC_UP换成RC_MI是因为加入了上位机,如果用UP会导致如果不注意把拨杆拨到中间,上位机控制不了夹爪关闭
+        if(dm_arm_ctrl_mode == User_defined_Controller)
+        {
+            if (sbus_data_fdb.sw4 == RC_UP) {
+                gripper_ctrl_mode = Gripper_OPEN;
+            } else if (sbus_data_fdb.sw4 == RC_DN) {
+                gripper_ctrl_mode = Gripper_CLOSE;
+            }
+        }
 
         if (sbus_data_fdb.sw2 == RC_UP) {
             cmd_chassis.ctrl_mode = CHASSIS_ENABLE;
@@ -254,13 +263,8 @@ void remote_to_cmd_sbus(void) {
         } else if (sbus_data_fdb.sw1 == RC_DN) {
             arm_cmd.ctrl_mode = ARM_DISABLE;
         }
-
-        if (sbus_data_fdb.sw4 == RC_UP) {
-            dm_arm_ctrl_mode=User_defined_Controller;
-        } else if (sbus_data_fdb.sw4 == RC_DN) {
-            dm_arm_ctrl_mode=PC_based_Controller;
-        }
     }
 }
+
 
 

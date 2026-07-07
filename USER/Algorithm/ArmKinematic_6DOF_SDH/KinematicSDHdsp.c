@@ -17,6 +17,8 @@
 //        {0.0f, 0.0f,   0.0f,   -M_PI_2},
 //        {0.0f, 0.0f,   0.0f,   0.0f}
 //};
+
+extern Gripper_mode_e MCU_gripper_ctrl;
 ////标准DH参数表
 const SDH_Param_t arm_sdh_table[6] = {
         {0.0f,  0.0f,       0.0f,       -M_PI_2},
@@ -131,6 +133,8 @@ void Pose6D_SetFromXYZ_RollYawPitch(Pose6D_t *pose,
 
     /* 让IK内部自己根据欧拉角去生成旋转矩阵 */
     pose->hasR = false;
+
+
 }
 
 static float IK_Clamp(float x, float min_v, float max_v)

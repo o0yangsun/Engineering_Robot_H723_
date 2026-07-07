@@ -1,4 +1,4 @@
-//
+﻿//
 // Created by 刘嘉俊 on 25-1-6.
 //
 
@@ -35,4 +35,8 @@ typedef enum
     AUTO_LEFT_GRAB    // 4: 右边抓取
 } Auto_ctrl_mode;
 
+
+
+
 #endif //CTRBOARD_H7_ALL_CMD_TASK_H
+

@@ -22,6 +22,7 @@
 #include "robot_task.h"
 #include "usart_task.h"
 #include "algo_ik_plan.h"
+#include "cmd_task.h"
 
 /* ================================ 使用说明 ===================================
  * 这版代码使用“离散点控制框架”：
@@ -80,10 +81,14 @@ volatile float g_man_yaw = -3.1415f;
 volatile float g_man_pitch = -1.57f;
 volatile uint8_t g_man_trigger = 0;
 
+Gripper_mode_e MCU_gripper_ctrl;
 
+// 手动序列激活标志
+static volatile uint8_t g_manual_seq_active = 0;
+extern Auto_ctrl_mode auto_ctrl_mode;
 
 /* 在这里切换输入模式 */
-#define ALGO_INPUT_MODE                ALGO_INPUT_MODE_TEST_CASE
+#define ALGO_INPUT_MODE                ALGO_INPUT_MODE_MANUAL_API
 
 /* -------------------------------- 离散控制参数 -------------------------------- */
 #define ALGO_DISCRETE_QUEUE_CAPACITY   16u
@@ -93,6 +98,7 @@ static dm_arm_feedback_msg_t algorithm_subscribe_arm_feedback_data;
 
 static subscriber_t *subscribe_arm_feedback_topic;
 static publisher_t *publish_movej_ref_topic;
+static publisher_t *publish_MCU_gripper_ctrl_mode_topic;
 
 static movej_ref_msg_t algorithm_publish_movej_ref_data;
 static uint32_t movej_pub_seq = 0;
@@ -132,14 +138,16 @@ typedef struct
     float yaw;
     float pitch;
     const char *name;
+    uint8_t gripper;
 } AlgorithmTask_TestPoint_t;
 
-static const AlgorithmTask_TestPoint_t g_task_test_list[] =
+static const AlgorithmTask_TestPoint_t g_task_test_list[] =   //右放
         {
-                {-0.02f, -0.2f, -0.05f, 0.0f, -3.1415926f, -1.57f, "P0_zero"},
-                {0.07f, -0.2f, -0.05f, 0.0f, -3.1415926f, -1.57f, "P1"},
-                {0.07f, -0.2f, 0.05f, 0.0f, -3.1415926f, -1.57f, "P2"},
-                {0.0f, 0.0f, 0.0f, 0.0f, -3.1415926f, -1.57f, "P3"},
+                {0.062f,  -0.19f, 0.06f, 0.0f, -3.1415926f, -1.57f, "P0",Gripper_CLOSE},
+                {0.062f,  -0.19f, -0.06f, 0.0f, -3.1415926f, -1.57f, "P1",Gripper_CLOSE},
+                {0.062f,  -0.19f, -0.08f, 0.0f, -3.1415926f, -1.57f, "P2",Gripper_OPEN},
+                {0.062f,  -0.19f, 0.06f, 0.0f, -3.1415926f, -1.57f, "P3",Gripper_OPEN},
+                {0.0f, 0.0f, 0.0f, 0.0f, -3.1415926f, -1.57f, "P4",Gripper_OPEN},
         };
 
 #define TASK_TEST_COUNT ((uint32_t)(sizeof(g_task_test_list) / sizeof(g_task_test_list[0])))
@@ -159,6 +167,7 @@ typedef struct
     uint8_t source;
     uint32_t source_index;
     const char *name;
+    uint8_t gripper_cmd;
 } AlgorithmTask_DiscreteCmd_t;
 
 /* -------------------------------- 离散点队列 -------------------------------- */
@@ -194,7 +203,8 @@ static uint16_t AlgorithmTask_DiscreteQueueCount(void);
 static bool AlgorithmTask_EnqueuePose(const Pose6D_t *pose,
                                       uint8_t source,
                                       uint32_t source_index,
-                                      const char *name);
+                                      const char *name,
+                                      uint8_t gripper_cmd);
 
 static void AlgorithmTask_SourceFillStep(const AlgoFeedback_t *fb, const AlgoOutput_t *out);
 static void AlgorithmTask_DiscreteExecutorStep(const AlgoFeedback_t *fb, const AlgoOutput_t *out);
@@ -207,7 +217,8 @@ bool AlgorithmTask_PostPoseTarget(const Pose6D_t *pose_target)
     return AlgorithmTask_EnqueuePose(pose_target,
                                      ALGO_SRC_EXTERNAL_POSE6D,
                                      0,
-                                     "external_pose6d");
+                                     "external_pose6d",
+                                     Gripper_OPEN);
 }
 
 bool AlgorithmTask_PostPoseTargetXYZRYP_Rad(float x, float y, float z,
@@ -219,8 +230,10 @@ bool AlgorithmTask_PostPoseTargetXYZRYP_Rad(float x, float y, float z,
     return AlgorithmTask_EnqueuePose(&pose,
                                      ALGO_SRC_EXTERNAL_XYZRYP,
                                      0,
-                                     "external_xyzryp");
+                                     "external_xyzryp",
+                                     Gripper_OPEN);
 }
+
 /* -------------------------------- 内部函数实现 -------------------------------- */
 static bool AlgorithmTask_BuildFeedback(AlgoFeedback_t *fb)
 {
@@ -253,8 +266,8 @@ static bool AlgorithmTask_BuildFeedback(AlgoFeedback_t *fb)
 
 static bool AlgorithmTask_IsSettled3FromOutput(const AlgoOutput_t *out)
 {
-    const float q_tol = 0.02f;   // 约 1.15 度
-    const float v_tol = 0.08f;   // rad/s
+    const float q_tol = 0.05f;   // 约 2.86 度
+    const float v_tol = 0.1f;   // rad/s
 
     if (out == NULL)
     {
@@ -278,11 +291,13 @@ static bool AlgorithmTask_IsSettled3FromOutput(const AlgoOutput_t *out)
 
         if (q_err > q_tol)
         {
+            USART7_DebugPrintf("pos more than error \r\n");
             return false;
         }
 
         if (v_abs > v_tol)
         {
+
             return false;
         }
     }
@@ -341,7 +356,9 @@ static bool AlgorithmTask_DiscreteQueuePop(AlgorithmTask_DiscreteCmd_t *cmd)
 static bool AlgorithmTask_EnqueuePose(const Pose6D_t *pose,
                                       uint8_t source,
                                       uint32_t source_index,
-                                      const char *name)
+                                      const char *name,
+                                      uint8_t gripper_cmd
+                                      )
 {
     AlgorithmTask_DiscreteCmd_t cmd;
     bool ok;
@@ -356,7 +373,7 @@ static bool AlgorithmTask_EnqueuePose(const Pose6D_t *pose,
     cmd.source = source;
     cmd.source_index = source_index;
     cmd.name = name;
-
+    cmd.gripper_cmd = gripper_cmd;
     taskENTER_CRITICAL();
     ok = AlgorithmTask_DiscreteQueuePush(&cmd);
     taskEXIT_CRITICAL();
@@ -489,6 +506,13 @@ static void AlgorithmTask_OnActiveCommandFinished(void)
     }
     /*---------------------只针对ALGO_SRC_TEST_CASE这一种控制方式-----------------------------*/
 
+    if (g_manual_seq_active && (AlgorithmTask_DiscreteQueueCount() == 0u)) {
+        g_manual_seq_active = 0;
+        auto_ctrl_mode = AUTO_WAIT;
+        USART7_DebugPrintf("[Seq] done\r\n");
+    }
+
+
     memset(&g_discrete_rt.active_cmd, 0, sizeof(g_discrete_rt.active_cmd));
     g_discrete_rt.waiting_finish = 0;
     g_discrete_rt.start_tick_ms = 0;
@@ -530,7 +554,7 @@ static void AlgorithmTask_DiscreteExecutorStep(const AlgoFeedback_t *fb, const A
                     g_discrete_rt.active_cmd = cmd;
                     g_discrete_rt.waiting_finish = 1;
                     g_discrete_rt.start_tick_ms = now_ms;
-
+                    MCU_gripper_ctrl = (Gripper_mode_e)cmd.gripper_cmd;
                     if (cmd.name != NULL)
                     {
                         // USART7_DebugPrintf("[Discrete] send %s\r\n", cmd.name);
@@ -584,7 +608,7 @@ static void AlgorithmTask_DiscreteExecutorStep(const AlgoFeedback_t *fb, const A
     {
         if (g_discrete_rt.active_cmd.name != NULL)
         {
-            // USART7_DebugPrintf("[Discrete] done %s\r\n", g_discrete_rt.active_cmd.name);
+             USART7_DebugPrintf("[Discrete] done %s\r\n", g_discrete_rt.active_cmd.name);
         }
         else
         {
@@ -679,6 +703,7 @@ void AlgorithmTask_Entry(void const * argument)
 static void algorithm_topic_pub_init(void)
 {
     publish_movej_ref_topic = pub_register("movej_ref_pub", sizeof(movej_ref_msg_t));
+    publish_MCU_gripper_ctrl_mode_topic = pub_register("MCU_gripper_ctrl_mode", sizeof(Gripper_mode_e));
 }
 
 static void algorithm_topic_sub_init(void)
@@ -711,6 +736,7 @@ static void algorithm_topic_pub_push(void)
     }
 
     pub_push_msg(publish_movej_ref_topic, &algorithm_publish_movej_ref_data);
+    pub_push_msg(publish_MCU_gripper_ctrl_mode_topic, &MCU_gripper_ctrl);
 }
 
 static void algorithm_topic_sub_pull(void)
@@ -718,3 +744,92 @@ static void algorithm_topic_sub_pull(void)
     sub_get_msg(subscribe_arm_feedback_topic, &algorithm_subscribe_arm_feedback_data);
 }
 /* -------------------------------- 线程间通讯Topics相关 ------------------------------- */
+
+
+
+
+// 四个序列（直接用你测好的点）
+static const AlgorithmTask_TestPoint_t g_seq_right_grab[] = {
+        {0.062f, -0.19f, 0.06f, 0.0f, -3.1415926f, -1.57f, "RG0", Gripper_OPEN},
+        {0.062f, -0.19f, -0.06f, 0.0f, -3.1415926f, -1.57f, "RG1", Gripper_OPEN},
+        {0.062f, -0.19f, -0.08f, 0.0f, -3.1415926f, -1.57f, "RG2", Gripper_CLOSE},
+        {0.062f, -0.19f, 0.06f, 0.0f, -3.1415926f, -1.57f, "RG3", Gripper_CLOSE},
+        {0.0f, 0.0f, 0.0f, 0.0f, -3.1415926f, -1.57f, "RG4", Gripper_CLOSE},
+};
+static const AlgorithmTask_TestPoint_t g_seq_right_place[] = {
+        {0.062f, -0.19f, 0.06f, 0.0f, -3.1415926f, -1.57f, "RP0", Gripper_CLOSE},
+        {0.062f, -0.19f, -0.06f, 0.0f, -3.1415926f, -1.57f, "RP1", Gripper_CLOSE},
+        {0.062f, -0.19f, -0.08f, 0.0f, -3.1415926f, -1.57f, "RP2", Gripper_OPEN},
+        {0.062f, -0.19f, 0.06f, 0.0f, -3.1415926f, -1.57f, "RP3", Gripper_OPEN},
+        {0.0f, 0.0f, 0.0f, 0.0f, -3.1415926f, -1.57f, "RP4", Gripper_OPEN},
+};
+static const AlgorithmTask_TestPoint_t g_seq_left_grab[] = {
+        {0.062f, 0.31f, 0.06f, 0.0f, -3.1415926f, -1.57f, "LG0", Gripper_OPEN},
+        {0.062f, 0.31f, -0.06f, 0.0f, -3.1415926f, -1.57f, "LG1", Gripper_OPEN},
+        {0.062f, 0.31f, -0.08f, 0.0f, -3.1415926f, -1.57f, "LG2", Gripper_CLOSE},
+        {0.062f, 0.31f, 0.06f, 0.0f, -3.1415926f, -1.57f, "LG3", Gripper_CLOSE},
+        {0.0f, 0.0f, 0.0f, 0.0f, -3.1415926f, -1.57f, "LG4", Gripper_CLOSE},
+};
+static const AlgorithmTask_TestPoint_t g_seq_left_place[] = {
+        {0.062f, 0.31f, 0.06f, 0.0f, -3.1415926f, -1.57f, "LP0", Gripper_CLOSE},
+        {0.062f, 0.31f, -0.06f, 0.0f, -3.1415926f, -1.57f, "LP1", Gripper_CLOSE},
+        {0.062f, 0.31f, -0.08f, 0.0f, -3.1415926f, -1.57f, "LP2", Gripper_OPEN},
+        {0.062f, 0.31f, 0.06f, 0.0f, -3.1415926f, -1.57f, "LP3", Gripper_OPEN},
+        {0.0f, 0.0f, 0.0f, 0.0f, -3.1415926f, -1.57f, "LP4", Gripper_OPEN},
+};
+
+
+/**
+ * @brief 触发执行一个序列（按键调用）
+ */
+bool AlgorithmTask_RunSequence(uint8_t seq_id)
+{
+    const AlgorithmTask_TestPoint_t *seq = NULL;
+    bool ok = true;
+    uint8_t len = 0;
+
+    if (g_manual_seq_active) return false;
+
+    switch (seq_id) {
+        case SEQ_RIGHT_GRAB:
+            seq = g_seq_right_grab;
+            len = sizeof(g_seq_right_grab) / sizeof(g_seq_right_grab[0]);
+            break;
+        case SEQ_RIGHT_PLACE:
+            seq = g_seq_right_place;
+            len = sizeof(g_seq_right_place) / sizeof(g_seq_right_place[0]);
+            break;
+        case SEQ_LEFT_GRAB:
+            seq = g_seq_left_grab;
+            len = sizeof(g_seq_left_grab) / sizeof(g_seq_left_grab[0]);
+            break;
+        case SEQ_LEFT_PLACE:
+            seq = g_seq_left_place;
+            len = sizeof(g_seq_left_place) / sizeof(g_seq_left_place[0]);
+            break;
+        default:
+            return false;
+    }
+
+    for (uint32_t i = 0; i < len; i++) {
+        Pose6D_t pose;
+        Pose6D_SetFromXYZ_RollYawPitch(&pose,
+                                       seq[i].x, seq[i].y, seq[i].z,
+                                       seq[i].roll, seq[i].yaw, seq[i].pitch);
+        if (!AlgorithmTask_EnqueuePose(&pose, ALGO_SRC_EXTERNAL_POSE6D, i, seq[i].name,seq[i].gripper)) {//把单个命令放到队列里面
+            ok = false;
+            break;
+        }
+    }
+
+    if (ok) {
+        g_manual_seq_active = 1;
+        switch (seq_id) {
+            case SEQ_RIGHT_GRAB:  auto_ctrl_mode = AUTO_RIGHT_GRAB;  break;
+            case SEQ_RIGHT_PLACE: auto_ctrl_mode = AUTO_RIGHT_PLACE; break;
+            case SEQ_LEFT_GRAB:   auto_ctrl_mode = AUTO_LEFT_GRAB;   break;
+            case SEQ_LEFT_PLACE:  auto_ctrl_mode = AUTO_LEFT_PLACE;  break;
+        }
+    }
+    return ok;
+}

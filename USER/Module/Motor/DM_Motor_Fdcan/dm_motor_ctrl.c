@@ -96,7 +96,7 @@ void dm_motor_init(void)
     motor[Motor5].ctrl.kp_set = 0.5f;
     motor[Motor5].ctrl.kd_set = 0.1f;
     motor[Motor5].tmp.PMAX = 12.5f;
-    motor[Motor5].tmp.VMAX = 5.0f;
+    motor[Motor5].tmp.VMAX = 10.0f;
 
     // 初始化电机6
     motor[Motor6].id = 0x06;

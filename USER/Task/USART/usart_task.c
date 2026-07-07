@@ -23,6 +23,9 @@
 #include "usart.h"
 #include <string.h>
 #include "drv_dwt.h"
+#include "cmd_task.h"
+#include "algorithm_task.h"
+#include "tim.h"
 
 #include <stdio.h>
 #include <stdarg.h>
@@ -51,7 +54,7 @@ static float usart_task_start_dt = 0; // 监测线程开始时间
 // 自定义控制器串口
 static volatile uint8_t usart1_rx_buffer_index = 0;  // 当前使用的接收缓冲区
 static volatile uint16_t usart1_rx_size = 0;
-static uint8_t usart1_rx_buffer[2][CUSTOMER_CONTROLLER_BUF_SIZE];
+static uint8_t usart1_rx_buffer[2][IoT_RX_BUF_SIZE];
 static SemaphoreHandle_t xSemaphoreUART1_RX = NULL;           // 通知任务处理信号量
 
 // 福斯遥控器
@@ -99,7 +102,7 @@ void usart_tx_semaphore_init(void)
 void USART1_RX_DMA_Init(void) {
     memset(usart1_rx_buffer, 0, sizeof(usart1_rx_buffer));
     //使能DMA串口接收
-    HAL_UARTEx_ReceiveToIdle_DMA(&huart1, usart1_rx_buffer[usart1_rx_buffer_index], CUSTOMER_CONTROLLER_BUF_SIZE);
+    HAL_UARTEx_ReceiveToIdle_DMA(&huart1, usart1_rx_buffer[usart1_rx_buffer_index], IoT_RX_BUF_SIZE);
     // 关闭DMA的传输过半中断，仅保留完成中断
     __HAL_DMA_DISABLE_IT(huart1.hdmarx, DMA_IT_HT);
 }
@@ -121,20 +124,35 @@ void USART10_RX_DMA_Init(void) {
 
 void process_usart1_rx_data(void) {
     uint8_t finishedBuffer;
-
     // 非阻塞获取信号量（因为队列集已确保信号量有效）
     if (xSemaphoreTake(xSemaphoreUART1_RX, 0) == pdTRUE) {
+
         finishedBuffer = usart1_rx_buffer_index ^ 1;
         /* 数据解析 */
-        referee_data_unpack(usart1_rx_buffer[finishedBuffer], usart1_rx_size);
-        vt13_remote_data_process(usart1_rx_buffer[finishedBuffer], usart1_rx_size);
+        IoT_data_unpack(usart1_rx_buffer[finishedBuffer], usart1_rx_size);
         // 清零所有接收缓冲区数据
         //memset(usart1_rx_buffer[finishedBuffer], 0, CUSTOMER_CONTROLLER_BUF_SIZE);
         // 只清零当前使用的缓冲区数据
-       // memset(usart1_rx_buffer[finishedBuffer], 0, usart1_rx_size);
+        //memset(usart1_rx_buffer[finishedBuffer], 0, usart1_rx_size);
 
     }
 }
+//void process_usart1_rx_data(void) {
+//    uint8_t finishedBuffer;
+//
+//    // 非阻塞获取信号量（因为队列集已确保信号量有效）
+//    if (xSemaphoreTake(xSemaphoreUART1_RX, 0) == pdTRUE) {
+//        finishedBuffer = usart1_rx_buffer_index ^ 1;
+//        /* 数据解析 */
+//        referee_data_unpack(usart1_rx_buffer[finishedBuffer], usart1_rx_size);
+//        vt13_remote_data_process(usart1_rx_buffer[finishedBuffer], usart1_rx_size);
+//        // 清零所有接收缓冲区数据
+//        //memset(usart1_rx_buffer[finishedBuffer], 0, CUSTOMER_CONTROLLER_BUF_SIZE);
+//        // 只清零当前使用的缓冲区数据
+//        // memset(usart1_rx_buffer[finishedBuffer], 0, usart1_rx_size);
+//
+//    }
+//}
 
 void process_uart5_rx_data(void) {
     uint8_t finishedBuffer;
@@ -262,12 +280,13 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef * huart, uint16_t Size)
         usart5_rx_buffer_index = usart5_rx_buffer_index ^ 1;
 
         HAL_UARTEx_ReceiveToIdle_DMA(&huart5, usart5_rx_buffer[usart5_rx_buffer_index], SBUS_RX_BUF_SIZE);
+        __HAL_DMA_DISABLE_IT(huart5.hdmarx, DMA_IT_HT);
 
         xSemaphoreGiveFromISR(xSemaphoreUART5_RX, NULL);
         portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
     }
 
-    if (huart->Instance == USART10)
+    else if (huart->Instance == USART10)
     {
         // 判断接收的数据大小是否限制，如果超过，则不处理
         if (Size > REFEREE_RX_BUF_SIZE)
@@ -280,15 +299,16 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef * huart, uint16_t Size)
         referee_rx_buffer_index = referee_rx_buffer_index ^ 1;
 
         HAL_UARTEx_ReceiveToIdle_DMA(&huart10, referee_rx_buffer[referee_rx_buffer_index], REFEREE_RX_BUF_SIZE);
+        __HAL_DMA_DISABLE_IT(huart10.hdmarx, DMA_IT_HT);
 
         xSemaphoreGiveFromISR(xSemaphoreUART10_RX,NULL);
         portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
     }
-
-    if (huart->Instance == USART1)  // 修改判断条件
+    else if (huart->Instance == USART1)  // 修改判断条件
     {
+
         // 判断接收的数据大小是否限制，如果超过，则不处理
-        if (Size > CUSTOMER_CONTROLLER_BUF_SIZE)
+        if (Size > 6)
         {
             return;
         }
@@ -297,7 +317,8 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef * huart, uint16_t Size)
         usart1_rx_size = Size;
         usart1_rx_buffer_index = usart1_rx_buffer_index ^ 1;
 
-        HAL_UARTEx_ReceiveToIdle_DMA(&huart1,usart1_rx_buffer[usart1_rx_buffer_index],CUSTOMER_CONTROLLER_BUF_SIZE);
+        HAL_UARTEx_ReceiveToIdle_DMA(&huart1,usart1_rx_buffer[usart1_rx_buffer_index],6);
+        __HAL_DMA_DISABLE_IT(huart1.hdmarx, DMA_IT_HT);
 
         xSemaphoreGiveFromISR(xSemaphoreUART1_RX, NULL);
         portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
@@ -306,7 +327,6 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef * huart, uint16_t Size)
 
 // DMA发送完成回调函数
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
-    // 检查是否是USART1的DMA发送完成
     if (huart->Instance == UART7) {
         // 释放信号量，表示DMA可以处理下一个缓冲区
         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
@@ -322,24 +342,26 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef * huart)
     if(huart->Instance == UART5)
     {
         HAL_UARTEx_ReceiveToIdle_DMA(&huart5, usart5_rx_buffer[usart5_rx_buffer_index], SBUS_RX_BUF_SIZE); // 接收发生错误后重启
+        __HAL_DMA_DISABLE_IT(huart5.hdmarx, DMA_IT_HT);
         memset(usart5_rx_buffer, 0, sizeof(usart5_rx_buffer));							   // 清除接收缓存
     }
 
     if(huart->Instance == USART10)
     {
         HAL_UARTEx_ReceiveToIdle_DMA(&huart10, referee_rx_buffer[referee_rx_buffer_index], REFEREE_RX_BUF_SIZE); // 接收发生错误后重启
+        __HAL_DMA_DISABLE_IT(huart10.hdmarx, DMA_IT_HT);
         memset(referee_rx_buffer, 0, sizeof(referee_rx_buffer));// 清除双缓存
     }
 
     if(huart->Instance == USART1)
     {
-        HAL_UARTEx_ReceiveToIdle_DMA(&huart1, usart1_rx_buffer[usart1_rx_buffer_index], CUSTOMER_CONTROLLER_BUF_SIZE); // 接收发生错误后重启
+        HAL_UARTEx_ReceiveToIdle_DMA(&huart1, usart1_rx_buffer[usart1_rx_buffer_index], 6); // 接收发生错误后重启
+        __HAL_DMA_DISABLE_IT(huart1.hdmarx, DMA_IT_HT);
         memset(usart1_rx_buffer, 0, sizeof(usart1_rx_buffer));// 清除双缓存
     }
 }
 
 // 自定义DebugPrintf函数（类似printf）
-//TODO:实际双缓冲区切换无效，不能做到一个buff[0]发送，另一个buff[1]接收，目前是buff[0]接收完立刻发送，同时切换到buff[1]接收完立刻发送
 void USART7_DebugPrintf(const char *format, ...) {
     va_list args;
     uint16_t length;
@@ -360,5 +382,83 @@ void USART7_DebugPrintf(const char *format, ...) {
             // 长度无效时直接释放信号量
             xSemaphoreGive(xSemaphoreUART7_TX);
         }
+    }
+}
+extern uint8_t left_full[2];   // 左侧两个罐子是否有物体
+extern uint8_t right_full[2];   // 右侧两个罐子
+extern Auto_ctrl_mode auto_ctrl_mode;
+static float last_exec_time = 0;
+extern uint32_t store_1_pwm_set;
+extern uint32_t store_2_pwm_set;
+void IoT_data_unpack(uint8_t data[126], uint16_t len)
+{
+    // 1. 遍历整个缓冲区，寻找第一个有效的帧头帧尾
+    int found_idx = -1;
+    for (int i = 0; i + 5 < len; i++) {          // 至少需要6字节
+        if (data[i] == 0xFF && data[i+5] == 0xFE) {
+            found_idx = i;
+            break;                              // 只处理第一个找到的包
+        }
+    }
+    if (found_idx == -1) return;                // 未找到合法包
+
+    // 2. 8秒时间限制（与原始逻辑一致）
+
+    float now = dwt_get_time_ms();
+    if (now - last_exec_time < 5000) return;
+
+
+    // 3. 提取中间4个字节（有效载荷）
+    uint8_t *p = &data[found_idx + 1];          // p[0]~p[3] 对应原来的 data[1]~data[4]
+
+    // 4. 根据标志位执行对应动作（完全保留原始处理逻辑）
+    if (p[0] == 1) {
+        last_exec_time = now;
+        for (int i = 0; i < 2; i++) {
+            if (!left_full[i]) {
+                left_full[i] = 1;
+                AlgorithmTask_RunSequence(SEQ_LEFT_PLACE);
+                store_2_pwm_set = i ? 1833 : 500;
+                break;
+            }
+        }
+        return;
+    }
+    else if(p[1] == 1) {
+        last_exec_time = now;
+
+        for (int i = 0; i < 2; i++) {
+            if (left_full[i]) {
+                AlgorithmTask_RunSequence(SEQ_LEFT_GRAB);
+                left_full[i] = 0;
+                store_2_pwm_set = i ? 1833 : 500;
+                break;
+            }
+        }
+        return;
+    }
+    else if(p[2] == 1) {
+        last_exec_time = now;
+        for (int i = 0; i < 2; i++) {
+            if (!right_full[i]) {
+                AlgorithmTask_RunSequence(SEQ_RIGHT_PLACE);
+                right_full[i] = 1;
+                store_1_pwm_set = i ? 1833 : 500;
+                break;
+            }
+        }
+        return;
+    }
+    else if(p[3] == 1) {
+        last_exec_time = now;
+        for (int i = 0; i < 2; i++) {
+            if (right_full[i]) {
+                AlgorithmTask_RunSequence(SEQ_RIGHT_GRAB);
+                right_full[i] = 0;
+                store_1_pwm_set = i ? 1833 : 500;
+                break;
+            }
+        }
+        return;
     }
 }

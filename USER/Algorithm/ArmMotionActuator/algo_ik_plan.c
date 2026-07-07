@@ -295,6 +295,7 @@ static void Algorithm_HandlePlannerStep(float dt)
     {
         USART7_DebugPrintf("[MoveJ] planner fault\r\n");
     }
+
 }
 
 /* ---------------------------- 对外接口实现 ---------------------------- */
