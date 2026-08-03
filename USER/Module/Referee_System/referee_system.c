@@ -156,6 +156,7 @@ void referee_data_unpack(uint8_t *data, uint16_t len)
             }
                 break;
 
+
             case STEP_DATA_CRC16: {
                 //从帧头到帧尾的过程中的数据一律码好
                 if (referee_unpack_obj.index < (REF_HEADER_CRC_CMD_SIZE + referee_unpack_obj.p_header->data_length)) {

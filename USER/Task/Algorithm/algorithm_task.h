@@ -7,8 +7,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define SEQ_RIGHT_GRAB   1
-#define SEQ_RIGHT_PLACE  2
+#define SEQ_LEFT_GRAB_RIGHT_PLACE   1
+#define SEQ_RETURN_TO_CENTER  2
 #define SEQ_LEFT_GRAB    3
 #define SEQ_LEFT_PLACE   4
 

@@ -65,7 +65,7 @@ static pc_control_t pc_data;
 static pc_control_t nuc_data;
 
 static Arm_mode_e dm_arm_ctrl_mode;
-static Gripper_mode_e gripper_ctrl_mode;
+static Gripper_mode_e gripper_ctrl;
 extern struct referee_fdb_msg referee_fdb;
 struct cmd_chassis_msg cmd_chassis;
 
@@ -126,9 +126,9 @@ void CmdTask_Entry(void const * argument)
 /* -------------------------------- 线程订阅Topics信息 ------------------------------- */
 
 /* -------------------------------- 线程代码编写段落 ------------------------------- */
-        pc_data = convert_remote_to_pc(&vt13_remote_parsed_data_fdb);
+        //pc_data = convert_remote_to_pc(&vt13_remote_parsed_data_fdb);
         nuc_data.keyboard.key_code = receive_nuc_keyboard_data;//只解析16位键盘数据
-        PC_keyboard_mouse(&pc_data);
+        //PC_keyboard_mouse(&pc_data);
         NUC_keyboard_mouse(&nuc_data);
         remote_to_cmd_sbus();
         arm_cmd_state_machine(); // 机械臂状态机
@@ -185,11 +185,10 @@ static void cmd_pub_push(void)
 {
     pub_push_msg(chassis_cmd_pub,&cmd_chassis);
     pub_push_msg(dm_arm_ctrl_mode_pub, &dm_arm_ctrl_mode);
-    pub_push_msg(gripper_ctrl_mode_pub, &gripper_ctrl_mode);
+    pub_push_msg(gripper_ctrl_mode_pub, &gripper_ctrl);
 }
 
 /* -------------------------------- 线程间通讯Topics相关 ------------------------------- */
-
 static uint8_t fn_1_last_state = 0;  // 保存上次的状态,初始为未按下
 static uint8_t fn_2_last_state = 0;  // 保存上次的状态,初始为未按下
 extern struct arm_cmd_msg arm_cmd;
@@ -209,16 +208,16 @@ void remote_to_cmd_sbus(void) {
 
         if (vt13_remote_parsed_data_fdb.mode_sw == 0)//夹爪控制模式
         {
-            gripper_ctrl_mode =Gripper_OPEN ;
+            gripper_ctrl =Gripper_OPEN ;
         }
         else if(vt13_remote_parsed_data_fdb.mode_sw == 2)
         {
-            gripper_ctrl_mode =Gripper_CLOSE;
+            gripper_ctrl =Gripper_CLOSE;
         }
         //底盘失使能
         if(vt13_remote_parsed_data_fdb.fn_1 && !fn_1_last_state)
         {
-            dm_arm_ctrl_mode = !dm_arm_ctrl_mode;
+            cmd_chassis.ctrl_mode = !cmd_chassis.ctrl_mode;
         }
         fn_1_last_state = vt13_remote_parsed_data_fdb.fn_1;
         //机械臂失使能
@@ -237,18 +236,18 @@ void remote_to_cmd_sbus(void) {
         }
         // 原SBUS遥控器数据（保持原有逻辑）
         cmd_chassis.vx = (sbus_data_fdb.ch2 * CHASSIS_RC_MOVE_RATIO_X / RC_MAX_VALUE
-                          + keyboard.vx * CHASSIS_PC_MOVE_RATIO_X +receive_pc_cmd_voice_control_data.vx + nuc_keyboard.vx * CHASSIS_PC_MOVE_RATIO_X);
+                          + keyboard.vx * CHASSIS_PC_MOVE_RATIO_X +receive_pc_cmd_voice_control_data.vx + pc_cmd_data.vx + nuc_keyboard.vx * CHASSIS_PC_MOVE_RATIO_X);
         cmd_chassis.vy = (sbus_data_fdb.ch4 * CHASSIS_RC_MOVE_RATIO_Y / RC_MAX_VALUE
-                          + keyboard.vy * CHASSIS_PC_MOVE_RATIO_Y +receive_pc_cmd_voice_control_data.vy + nuc_keyboard.vy * CHASSIS_PC_MOVE_RATIO_Y);
+                          + keyboard.vy * CHASSIS_PC_MOVE_RATIO_Y +receive_pc_cmd_voice_control_data.vy + pc_cmd_data.vy + nuc_keyboard.vy * CHASSIS_PC_MOVE_RATIO_Y);
         cmd_chassis.vw = (sbus_data_fdb.ch1 * CHASSIS_RC_MOVE_RATIO_W / RC_MAX_VALUE
-                          + keyboard.vw * CHASSIS_PC_MOVE_RATIO_W +receive_pc_cmd_voice_control_data.vw + nuc_keyboard.vw * CHASSIS_PC_MOVE_RATIO_W);
+                          + keyboard.vw * CHASSIS_PC_MOVE_RATIO_W +receive_pc_cmd_voice_control_data.vw + pc_cmd_data.vw + nuc_keyboard.vw * CHASSIS_PC_MOVE_RATIO_W);
         // 原SBUS遥控器泵模式控制（保持原有逻辑）
         if(dm_arm_ctrl_mode == User_defined_Controller)
         {
             if (sbus_data_fdb.sw4 == RC_UP) {
-                gripper_ctrl_mode = Gripper_OPEN;
+                gripper_ctrl = Gripper_OPEN;
             } else if (sbus_data_fdb.sw4 == RC_DN) {
-                gripper_ctrl_mode = Gripper_CLOSE;
+                gripper_ctrl = Gripper_CLOSE;
             }
         }
 

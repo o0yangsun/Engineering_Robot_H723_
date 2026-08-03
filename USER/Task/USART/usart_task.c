@@ -441,7 +441,7 @@ void IoT_data_unpack(uint8_t data[126], uint16_t len)
         last_exec_time = now;
         for (int i = 0; i < 2; i++) {
             if (!right_full[i]) {
-                AlgorithmTask_RunSequence(SEQ_RIGHT_PLACE);
+                AlgorithmTask_RunSequence(SEQ_RETURN_TO_CENTER);
                 right_full[i] = 1;
                 store_1_pwm_set = i ? 1833 : 500;
                 break;
@@ -449,14 +449,23 @@ void IoT_data_unpack(uint8_t data[126], uint16_t len)
         }
         return;
     }
-    else if(p[3] == 1) {
+    else if (p[3] == 1) {
         last_exec_time = now;
-        for (int i = 0; i < 2; i++) {
-            if (right_full[i]) {
-                AlgorithmTask_RunSequence(SEQ_RIGHT_GRAB);
-                right_full[i] = 0;
-                store_1_pwm_set = i ? 1833 : 500;
-                break;
+        int i, j;
+
+        for (i = 0; i < 2; i++) {
+            if (left_full[i]) {
+                for (j = 0; j < 2; j++) {
+                    if (!right_full[j]) {
+                        AlgorithmTask_RunSequence(SEQ_LEFT_GRAB_RIGHT_PLACE);
+                        left_full[i] = 0;
+                        right_full[j] = 1;
+                        store_1_pwm_set = i ? 500 : 1833;
+                        store_1_pwm_set = j ? 500 : 1833;
+                        return;
+                    }
+                }
+                return;
             }
         }
         return;

@@ -107,6 +107,20 @@ struct ins_msg
 };
 /** -------------------------------- Ins_Task Topics_Msg ------------------------------- **/
 
+/** -------------------------------- pose_Task Topics_Msg ------------------------------- **/
+struct pose_msg
+{
+    // н╩вк
+    float x;
+    float y;
+    float z;
+    float roll;
+    float pitch;
+    float yaw;
+
+};
+/** -------------------------------- pose_Task Topics_Msg ------------------------------- **/
+
 /** -------------------------------- Cmd_Task Topics_Msg ------------------------------- **/
 struct cmd_chassis_msg
 {

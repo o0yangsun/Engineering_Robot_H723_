@@ -95,8 +95,11 @@ extern Auto_ctrl_mode auto_ctrl_mode;
 #define ALGO_DISCRETE_TIMEOUT_MS       20000u
 /* -------------------------------- 线程间通讯Topics相关 ------------------------------- */
 static dm_arm_feedback_msg_t algorithm_subscribe_arm_feedback_data;
-
+static struct pose_msg object_pose;
+uint8_t  debug_mode_state = 0;
+static uint8_t last_debug_mode_state = 0;
 static subscriber_t *subscribe_arm_feedback_topic;
+static subscriber_t *subscribe_nuc_object_pose_topic;
 static publisher_t *publish_movej_ref_topic;
 static publisher_t *publish_MCU_gripper_ctrl_mode_topic;
 
@@ -291,7 +294,7 @@ static bool AlgorithmTask_IsSettled3FromOutput(const AlgoOutput_t *out)
 
         if (q_err > q_tol)
         {
-            USART7_DebugPrintf("pos more than error \r\n");
+            //USART7_DebugPrintf("pos more than error \r\n");
             return false;
         }
 
@@ -487,6 +490,36 @@ static void AlgorithmTask_SourceFillStep(const AlgoFeedback_t *fb, const AlgoOut
     }
 #endif
 
+
+/* Debug mode: 当 debug_mode_state 从 0 变为 1 时，执行一次抓取 object_pose 任务 */
+if (debug_mode_state == 1 && last_debug_mode_state == 0)
+{
+    /* 简单判断 object_pose 是否有效（可根据实际情况改为检查 valid 字段） */
+    if (fabsf(object_pose.x) > 1e-4f || fabsf(object_pose.y) > 1e-4f || fabsf(object_pose.z) > 1e-4f)
+    {
+        Pose6D_t pose;
+        Pose6D_SetFromXYZ_RollYawPitch(&pose,
+                                       object_pose.x, object_pose.y, object_pose.z,
+                                       object_pose.roll, object_pose.yaw, object_pose.pitch);
+        if (AlgorithmTask_EnqueuePose(&pose,
+                                      ALGO_SRC_EXTERNAL_POSE6D,
+                                      0,
+                                      "debug_grab",
+                                      Gripper_CLOSE))
+        {
+            USART7_DebugPrintf("[DEBUG] Grab object pose enqueued\r\n");
+        }
+        else
+        {
+            USART7_DebugPrintf("[DEBUG] Failed to enqueue grab pose (queue full?)\r\n");
+        }
+    }
+    else
+    {
+        USART7_DebugPrintf("[DEBUG] Object pose invalid (all zero?)\r\n");
+    }
+}
+last_debug_mode_state = debug_mode_state;
 
 }
 
@@ -710,6 +743,7 @@ static void algorithm_topic_sub_init(void)
 {
     // 订阅关节反馈数据
     subscribe_arm_feedback_topic = sub_register("dm_arm_feedback_pub", sizeof(dm_arm_feedback_msg_t));
+    subscribe_nuc_object_pose_topic = sub_register("nuc_object_pose_data", sizeof(struct pose_msg));
 }
 
 static void algorithm_topic_pub_push(void)
@@ -742,6 +776,7 @@ static void algorithm_topic_pub_push(void)
 static void algorithm_topic_sub_pull(void)
 {
     sub_get_msg(subscribe_arm_feedback_topic, &algorithm_subscribe_arm_feedback_data);
+    sub_get_msg(subscribe_nuc_object_pose_topic, &object_pose);
 }
 /* -------------------------------- 线程间通讯Topics相关 ------------------------------- */
 
@@ -749,32 +784,39 @@ static void algorithm_topic_sub_pull(void)
 
 
 // 四个序列（直接用你测好的点）
-static const AlgorithmTask_TestPoint_t g_seq_right_grab[] = {
-        {0.062f, -0.19f, 0.06f, 0.0f, -3.1415926f, -1.57f, "RG0", Gripper_OPEN},
-        {0.062f, -0.19f, -0.06f, 0.0f, -3.1415926f, -1.57f, "RG1", Gripper_OPEN},
-        {0.062f, -0.19f, -0.08f, 0.0f, -3.1415926f, -1.57f, "RG2", Gripper_CLOSE},
-        {0.062f, -0.19f, 0.06f, 0.0f, -3.1415926f, -1.57f, "RG3", Gripper_CLOSE},
-        {0.0f, 0.0f, 0.0f, 0.0f, -3.1415926f, -1.57f, "RG4", Gripper_CLOSE},
+//static const AlgorithmTask_TestPoint_t g_seq_right_grab[] = {
+//        {0.062f, -0.21f, 0.06f, 0.0f, -3.1415926f, -1.57f, "RG0", Gripper_OPEN},
+//        {0.062f, -0.21f, -0.06f, 0.0f, -3.1415926f, -1.57f, "RG1", Gripper_OPEN},
+//        {0.062f, -0.21f, -0.08f, 0.0f, -3.1415926f, -1.57f, "RG2", Gripper_CLOSE},
+//        {0.062f, -0.21f, 0.06f, 0.0f, -3.1415926f, -1.57f, "RG3", Gripper_CLOSE},
+//        {0.0f, 0.0f, 0.0f, 0.0f, -3.1415926f, -1.57f, "RG4", Gripper_CLOSE},
+//};
+static const AlgorithmTask_TestPoint_t g_seq_left_grab_right_place[] = {
+        {0.062f, 0.332f, 0.06f, 0.0f, -3.1415926f, -1.57f, "LG0", Gripper_OPEN},
+        {0.062f, 0.332f, -0.06f, 0.0f, -3.1415926f, -1.57f, "LG1", Gripper_OPEN},
+        {0.062f, 0.332f, -0.08f, 0.0f, -3.1415926f, -1.57f, "LG2", Gripper_CLOSE},
+        {0.062f, 0.332f, 0.06f, 0.0f, -3.1415926f, -1.57f, "LG3", Gripper_CLOSE},
+        {0.062f, -0.23f, 0.06f, 0.0f, -3.1415926f, -1.57f, "RP0", Gripper_CLOSE},
+        {0.062f, -0.23f, -0.06f, 0.0f, -3.1415926f, -1.57f, "RP1", Gripper_CLOSE},
+        {0.062f, -0.23f, -0.08f, 0.0f, -3.1415926f, -1.57f, "RP2", Gripper_OPEN},
+        {0.062f, -0.23f, 0.06f, 0.0f, -3.1415926f, -1.57f, "RP3", Gripper_OPEN},
+        {0.0f, 0.0f, 0.0f, 0.0f, -3.1415926f, -1.57f, "RP4", Gripper_OPEN},
 };
-static const AlgorithmTask_TestPoint_t g_seq_right_place[] = {
-        {0.062f, -0.19f, 0.06f, 0.0f, -3.1415926f, -1.57f, "RP0", Gripper_CLOSE},
-        {0.062f, -0.19f, -0.06f, 0.0f, -3.1415926f, -1.57f, "RP1", Gripper_CLOSE},
-        {0.062f, -0.19f, -0.08f, 0.0f, -3.1415926f, -1.57f, "RP2", Gripper_OPEN},
-        {0.062f, -0.19f, 0.06f, 0.0f, -3.1415926f, -1.57f, "RP3", Gripper_OPEN},
+static const AlgorithmTask_TestPoint_t return_to_center[] = {
         {0.0f, 0.0f, 0.0f, 0.0f, -3.1415926f, -1.57f, "RP4", Gripper_OPEN},
 };
 static const AlgorithmTask_TestPoint_t g_seq_left_grab[] = {
-        {0.062f, 0.31f, 0.06f, 0.0f, -3.1415926f, -1.57f, "LG0", Gripper_OPEN},
-        {0.062f, 0.31f, -0.06f, 0.0f, -3.1415926f, -1.57f, "LG1", Gripper_OPEN},
-        {0.062f, 0.31f, -0.08f, 0.0f, -3.1415926f, -1.57f, "LG2", Gripper_CLOSE},
-        {0.062f, 0.31f, 0.06f, 0.0f, -3.1415926f, -1.57f, "LG3", Gripper_CLOSE},
+        {0.062f, 0.332f, 0.06f, 0.0f, -3.1415926f, -1.57f, "LG0", Gripper_OPEN},
+        {0.062f, 0.332f, -0.06f, 0.0f, -3.1415926f, -1.57f, "LG1", Gripper_OPEN},
+        {0.062f, 0.332f, -0.08f, 0.0f, -3.1415926f, -1.57f, "LG2", Gripper_CLOSE},
+        {0.062f, 0.332f, 0.06f, 0.0f, -3.1415926f, -1.57f, "LG3", Gripper_CLOSE},
         {0.0f, 0.0f, 0.0f, 0.0f, -3.1415926f, -1.57f, "LG4", Gripper_CLOSE},
 };
 static const AlgorithmTask_TestPoint_t g_seq_left_place[] = {
-        {0.062f, 0.31f, 0.06f, 0.0f, -3.1415926f, -1.57f, "LP0", Gripper_CLOSE},
-        {0.062f, 0.31f, -0.06f, 0.0f, -3.1415926f, -1.57f, "LP1", Gripper_CLOSE},
-        {0.062f, 0.31f, -0.08f, 0.0f, -3.1415926f, -1.57f, "LP2", Gripper_OPEN},
-        {0.062f, 0.31f, 0.06f, 0.0f, -3.1415926f, -1.57f, "LP3", Gripper_OPEN},
+        {0.062f, 0.325f, 0.06f, 0.0f, -3.1415926f, -1.57f, "LP0", Gripper_CLOSE},
+        {0.062f, 0.325f, -0.06f, 0.0f, -3.1415926f, -1.57f, "LP1", Gripper_CLOSE},
+        {0.062f, 0.325f, -0.08f, 0.0f, -3.1415926f, -1.57f, "LP2", Gripper_OPEN},
+        {0.062f, 0.325f, 0.06f, 0.0f, -3.1415926f, -1.57f, "LP3", Gripper_OPEN},
         {0.0f, 0.0f, 0.0f, 0.0f, -3.1415926f, -1.57f, "LP4", Gripper_OPEN},
 };
 
@@ -791,13 +833,13 @@ bool AlgorithmTask_RunSequence(uint8_t seq_id)
     if (g_manual_seq_active) return false;
 
     switch (seq_id) {
-        case SEQ_RIGHT_GRAB:
-            seq = g_seq_right_grab;
-            len = sizeof(g_seq_right_grab) / sizeof(g_seq_right_grab[0]);
+        case SEQ_LEFT_GRAB_RIGHT_PLACE:
+            seq = g_seq_left_grab_right_place;
+            len = sizeof(g_seq_left_grab_right_place) / sizeof(g_seq_left_grab_right_place[0]);
             break;
-        case SEQ_RIGHT_PLACE:
-            seq = g_seq_right_place;
-            len = sizeof(g_seq_right_place) / sizeof(g_seq_right_place[0]);
+        case SEQ_RETURN_TO_CENTER:
+            seq = return_to_center;
+            len = sizeof(return_to_center) / sizeof(return_to_center[0]);
             break;
         case SEQ_LEFT_GRAB:
             seq = g_seq_left_grab;
@@ -825,8 +867,8 @@ bool AlgorithmTask_RunSequence(uint8_t seq_id)
     if (ok) {
         g_manual_seq_active = 1;
         switch (seq_id) {
-            case SEQ_RIGHT_GRAB:  auto_ctrl_mode = AUTO_RIGHT_GRAB;  break;
-            case SEQ_RIGHT_PLACE: auto_ctrl_mode = AUTO_RIGHT_PLACE; break;
+            case SEQ_LEFT_GRAB_RIGHT_PLACE:  auto_ctrl_mode = AUTO_RIGHT_GRAB;  break;
+            case SEQ_RETURN_TO_CENTER: auto_ctrl_mode = AUTO_RIGHT_PLACE; break;
             case SEQ_LEFT_GRAB:   auto_ctrl_mode = AUTO_LEFT_GRAB;   break;
             case SEQ_LEFT_PLACE:  auto_ctrl_mode = AUTO_LEFT_PLACE;  break;
         }

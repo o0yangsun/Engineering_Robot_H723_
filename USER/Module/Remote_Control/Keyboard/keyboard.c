@@ -184,7 +184,7 @@ pc_control_t convert_remote_to_pc(const vt13_remote_parsed_data_t *remote)
 }
 
 
-
+volatile uint8_t gripper_cmd_updated = 0;   // 1表示有新命令待执行
 extern struct arm_cmd_msg arm_cmd;
 
 void PC_keyboard_mouse(const pc_control_t *pc_control)
@@ -195,10 +195,12 @@ void PC_keyboard_mouse(const pc_control_t *pc_control)
     // X按键用于打开夹爪
     if(keyboard.x.state == KEY_PRESS_ONCE) {
         gripper_ctrl_mode = Gripper_OPEN;
+        gripper_cmd_updated =1;
     }
     // Z按键用于关闭夹爪
     if(keyboard.z.state == KEY_PRESS_ONCE) {
         gripper_ctrl_mode = Gripper_CLOSE;
+        gripper_cmd_updated =1;
     }
 
 //    key_state_machine(&keyboard.g,pc_control->keyboard.bit.G);
@@ -315,10 +317,12 @@ void NUC_keyboard_mouse(const pc_control_t *pc_control)
     // X按键用于打开夹爪
     if(nuc_keyboard.x.state == KEY_PRESS_ONCE) {
         gripper_ctrl_mode = Gripper_OPEN;
+        gripper_cmd_updated =1;
     }
     // Z按键用于关闭夹爪
     if(nuc_keyboard.z.state == KEY_PRESS_ONCE) {
         gripper_ctrl_mode = Gripper_CLOSE;
+        gripper_cmd_updated =1;
     }
 
 //    key_state_machine(&keyboard.g,pc_control->keyboard.bit.G);
@@ -377,7 +381,7 @@ void NUC_keyboard_mouse(const pc_control_t *pc_control)
 
         for (int i = 0; i < 2; i++) {
             if (!right_full[i]) {
-                AlgorithmTask_RunSequence(SEQ_RIGHT_PLACE);
+                AlgorithmTask_RunSequence(SEQ_RETURN_TO_CENTER);
                 right_full[i] = 1;
                 store_1_pwm_set = i ? 1833 : 500;
 
@@ -391,7 +395,7 @@ void NUC_keyboard_mouse(const pc_control_t *pc_control)
 
         for (int i = 0; i < 2; i++) {
             if (right_full[i]) {
-                AlgorithmTask_RunSequence(SEQ_RIGHT_GRAB);
+                AlgorithmTask_RunSequence(SEQ_LEFT_GRAB_RIGHT_PLACE);
                 right_full[i] = 0;
                 store_1_pwm_set = i ? 1833 : 500;
 

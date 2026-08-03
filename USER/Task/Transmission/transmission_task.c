@@ -46,6 +46,7 @@ static struct ins_msg transmission_subscribe_ins_data;
 static struct cmd_chassis_msg receive_pc_cmd_chassis_data;
 static struct pc_cmd_arm_msg receive_pc_cmd_arm_msg_data;
 static struct pc_cmd_voice_control_msg receive_pc_cmd_voice_control_data;
+static struct pose_msg receive_pc_object_pose_data;
 static dm_arm_feedback_msg_t transmission_subscribe_arm_feedback_data;
 
 static uint16_t receive_pc_keyboard_data;
@@ -53,6 +54,8 @@ static publisher_t *pc_cmd_arm_topic_publish;
 static publisher_t *pc_cmd_chassis_topic_publish;
 static publisher_t *pc_cmd_voice_control_publisher;
 static publisher_t *nuc_keyboard_publisher;
+static publisher_t *nuc_object_pose_publisher;
+
 static subscriber_t *subscribe_ins_topic;
 static subscriber_t *subscribe_cmd_chassis_topic;
 static subscriber_t *subscribe_arm_feedback_topic;
@@ -149,6 +152,7 @@ static void transmission_topic_pub_init(void)
     pc_cmd_arm_topic_publish = pub_register("pc_cmd_arm_pub",sizeof(struct pc_cmd_arm_msg));
     pc_cmd_voice_control_publisher =pub_register("voice_control_pub",sizeof(struct pc_cmd_voice_control_msg));
     nuc_keyboard_publisher =pub_register("nuc_keyboard_data",sizeof(uint16_t));
+    nuc_object_pose_publisher =pub_register("nuc_object_pose_data",sizeof(struct pose_msg));
 }
 
 static void transmission_topic_sub_init(void)
@@ -228,12 +232,44 @@ void uppack_pc_cmd_voice_control(void)
                                                    (Rx_data[26] << 16)  |  // byte1? 15-8λ
                                                    (Rx_data[27] << 24)) / 10000.0f;    // byte0? 7-0λ
 }
+
+void uppack_object_pose_data(void)
+{
+    receive_pc_object_pose_data.x = (float)((Rx_data[4] << 0) |  // byte3占 31-24位
+                                                   (Rx_data[5] << 8) |  // byte2占 23-16位
+                                                   (Rx_data[6] << 16)  |  // byte1占 15-8位
+                                                   (Rx_data[7] << 24)) / 10000.0f;    // byte0占 7-0位
+    receive_pc_object_pose_data.y = (float)((Rx_data[8] << 0) |  // byte3? 31-24λ
+                                                   (Rx_data[9] << 8) |  // byte2? 23-16λ
+                                                   (Rx_data[10] << 16)  |  // byte1? 15-8λ
+                                                   (Rx_data[11] << 24)) / 10000.0f;    // byte0? 7-0λ
+    receive_pc_object_pose_data.z = (float)((Rx_data[12] << 0) |  // byte3? 31-24λ
+                                                   (Rx_data[13] << 8) |  // byte2? 23-16λ
+                                                   (Rx_data[14] << 16)  |  // byte1? 15-8λ
+                                                   (Rx_data[15] << 24)) / 10000.0f;    // byte0
+    receive_pc_object_pose_data.roll = (float)((Rx_data[16] << 0) |  // byte3占 31-24位
+                                            (Rx_data[17] << 8) |  // byte2占 23-16位
+                                            (Rx_data[18] << 16)  |  // byte1占 15-8位
+                                            (Rx_data[19] << 24)) / 10000.0f;    // byte0占 7-0位
+    receive_pc_object_pose_data.pitch = (float)((Rx_data[20] << 0) |  // byte3? 31-24λ
+                                            (Rx_data[21] << 8) |  // byte2? 23-16λ
+                                            (Rx_data[22] << 16)  |  // byte1? 15-8λ
+                                            (Rx_data[23] << 24)) / 10000.0f;    // byte0? 7-0λ
+    receive_pc_object_pose_data.yaw = (float)((Rx_data[24] << 0) |  // byte3? 31-24λ
+                                            (Rx_data[25] << 8) |  // byte2? 23-16λ
+                                            (Rx_data[26] << 16)  |  // byte1? 15-8λ
+                                            (Rx_data[27] << 24)) / 10000.0f;    // byte0
+}
+
+
+
 static void transmission_topic_pub_push(void)
 {
     pub_push_msg(pc_cmd_chassis_topic_publish,&receive_pc_cmd_chassis_data);
     pub_push_msg(pc_cmd_arm_topic_publish,&receive_pc_cmd_arm_msg_data);
     pub_push_msg(pc_cmd_voice_control_publisher,&receive_pc_cmd_voice_control_data);
     pub_push_msg(nuc_keyboard_publisher,&receive_pc_keyboard_data);
+    pub_push_msg(nuc_object_pose_publisher,&receive_pc_object_pose_data);
 }
 
 static void transmission_topic_sub_pull(void)
@@ -389,6 +425,14 @@ void UnpackPCData(void)
                 else if(Rx_data[2] == 0x21)//机械臂数据包
                 {
                     uppack_pc_cmd_arm_data();
+                }
+                else if(Rx_data[2] == 0x38)
+                {
+                    uppack_pc_cmd_voice_control();
+                }
+                else if(Rx_data[2] == 0x15)
+                {
+                    uppack_object_pose_data();
                 }
 
 
