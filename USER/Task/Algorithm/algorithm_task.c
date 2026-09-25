@@ -291,7 +291,7 @@ static bool AlgorithmTask_IsSettled3FromOutput(const AlgoOutput_t *out)
 
         if (q_err > q_tol)
         {
-            USART7_DebugPrintf("pos more than error \r\n");
+            //USART7_DebugPrintf("pos more than error \r\n");
             return false;
         }
 

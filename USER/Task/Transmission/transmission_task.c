@@ -390,6 +390,10 @@ void UnpackPCData(void)
                 {
                     uppack_pc_cmd_arm_data();
                 }
+                else if(Rx_data[2] == 0x38)
+                {
+                    uppack_pc_cmd_voice_control();
+                }
 
 
 

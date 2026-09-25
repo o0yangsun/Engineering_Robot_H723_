@@ -59,10 +59,11 @@ static float dm_user_motor_angles[6] = {0.0f};   // 期望角度值
 
 Gripper_mode_e gripper_state = Gripper_OPEN;
 Gripper_mode_e mcu_gripper_state = Gripper_OPEN;
+extern Gripper_mode_e gripper_ctrl_mode;
 
 //User_defined_Controller, //自定义模式控制器
 //PC_based_Controller,    //上位机控制
-static Arm_mode_e arm_control_state = User_defined_Controller;
+static Arm_mode_e arm_control_state;
 static Arm_mode_e arm_control_last_state;
 Auto_ctrl_mode auto_ctrl_mode = AUTO_WAIT ;
 //AUTO_WAIT,         // 0: 等待
@@ -87,7 +88,7 @@ struct arm_cmd_msg arm_cmd = {
         .last_mode = ARM_DISABLE
 };
 
-void arm_mode_change_init_process(float motor_angle[6])
+void arm_mode_change_init_process(const float motor_angle[6])
 {
 
     dm_motor_enable(&hfdcan3, &motor[Motor1]);
@@ -430,7 +431,7 @@ void DMmotorTask_Entry(void const * argument)
 /* -------------------------------- 线程订阅Topics信息 ------------------------------- */
 
 /* -------------------------------- 线程代码编写段落 ------------------------------- */
-
+        /**接收自定义控制器发来的关节命令**/
         if (xQueueReceive(xControlQueue, dm_angles, 0) == pdPASS)
         {
             for(uint8_t i=0;i<6;i++)
@@ -438,49 +439,60 @@ void DMmotorTask_Entry(void const * argument)
                 dm_user_motor_angles[i] = dm_angles[i];
             }
         }
-//        if(dm_arm_feedback_pub_msg.arm_control_state == User_defined_Controller && arm_control_last_state != dm_arm_feedback_pub_msg.arm_control_state)
-//        {
-//            arm_mode_change_init_process(dm_user_motor_angles);
-//        }
-//        else if(dm_arm_feedback_pub_msg.arm_control_state == PC_based_Controller && arm_control_last_state != dm_arm_feedback_pub_msg.arm_control_state)
-//        {
-//            arm_mode_change_init_process(dm_pc_motor_angles);
-//        }
-//        if(dm_arm_feedback_pub_msg.arm_control_state == User_defined_Controller)//自定义控制模式
-//        {
-//
-//            DMcontrol_motor_1(&hfdcan3, &motor_controls[Motor1], dm_user_motor_angles[Motor1]);
-//            DMcontrol_motor_2(&hfdcan3, &motor_controls[Motor2], dm_user_motor_angles[Motor2]);
-//            DMcontrol_motor_3(&hfdcan2, &motor_controls[Motor3], dm_user_motor_angles[Motor3]);
-//            DMcontrol_motor_4(&hfdcan2, &motor_controls[Motor4], dm_user_motor_angles[Motor4]);
-//            DMcontrol_motor_5(&hfdcan2, &motor_controls[Motor5], dm_user_motor_angles[Motor5]);
-//            DMcontrol_motor_6(&hfdcan2, &motor_controls[Motor6], dm_user_motor_angles[Motor6]);
-//            DMcontrol_motor_7(&hfdcan2,dm_arm_feedback_pub_msg.gripper_state);//夹爪控制
-//        }
-//        else if(dm_arm_feedback_pub_msg.arm_control_state == PC_based_Controller)//PC控制模式
-//        {
-//            for (int i = 0; i < 6; i++)
-//            {
-//                dm_pc_motor_angles[i] = dm_receive_pc_cmd_arm_msg_data.joint_pos[i] * 57.3f;
-//            }
-//            DMcontrol_motor_1(&hfdcan3, &motor_controls[Motor1], dm_pc_motor_angles[Motor1]);
-//            DMcontrol_motor_2(&hfdcan3, &motor_controls[Motor2], dm_pc_motor_angles[Motor2]);
-//            DMcontrol_motor_3(&hfdcan2, &motor_controls[Motor3], dm_pc_motor_angles[Motor3]);
-//            DMcontrol_motor_4(&hfdcan2, &motor_controls[Motor4], dm_pc_motor_angles[Motor4]);
-//            DMcontrol_motor_5(&hfdcan2, &motor_controls[Motor5], dm_pc_motor_angles[Motor5]);
-//            DMcontrol_motor_6(&hfdcan2, &motor_controls[Motor6], dm_pc_motor_angles[Motor6]);
-//            DMcontrol_motor_7(&hfdcan2,dm_receive_pc_cmd_arm_msg_data.gripper_ctrl);//夹爪控制
-//            if(dm_receive_pc_cmd_arm_msg_data.pc_ctrl_process_state == 6 && pc_ctrl_process_last_state != 6)//完成第一个步骤
-//            {
-//                auto_ctrl_mode = AUTO_WAIT;
-//            }
-//            pc_ctrl_process_last_state = dm_receive_pc_cmd_arm_msg_data.pc_ctrl_process_state;
-//
-//        }
+        /**控制状态发生改变，将电机转到对应数组的位置**/
+        if (arm_control_last_state != dm_arm_feedback_pub_msg.arm_control_state)
+        {
+            float *target_angles = NULL;
+            switch (dm_arm_feedback_pub_msg.arm_control_state) {
+                case User_defined_Controller:
+                    target_angles = dm_user_motor_angles;
+                    break;
+                case PC_based_Controller:
+                    target_angles = dm_pc_motor_angles;
+                    break;
+                case MCU_based_Controller:
+                    target_angles = dmmotor_subscribe_movej_ref_data.q_ref_rad;
+                    break;
+                default:
+                    break;
+            }
+            if (target_angles != NULL) {
+                arm_mode_change_init_process(target_angles);
+            }
+        }
+        /**根据不同的控制模式进行控制**/
+        if(dm_arm_feedback_pub_msg.arm_control_state == User_defined_Controller)//自定义控制模式
+        {
 
-
-//        if(dm_arm_feedback_pub_msg.arm_control_state == MCU_based_Controller)
-//        {
+            DMcontrol_motor_1(&hfdcan3, &motor_controls[Motor1], dm_user_motor_angles[Motor1]);
+            DMcontrol_motor_2(&hfdcan3, &motor_controls[Motor2], dm_user_motor_angles[Motor2]);
+            DMcontrol_motor_3(&hfdcan2, &motor_controls[Motor3], dm_user_motor_angles[Motor3]);
+            DMcontrol_motor_4(&hfdcan2, &motor_controls[Motor4], dm_user_motor_angles[Motor4]);
+            DMcontrol_motor_5(&hfdcan2, &motor_controls[Motor5], dm_user_motor_angles[Motor5]);
+            DMcontrol_motor_6(&hfdcan2, &motor_controls[Motor6], dm_user_motor_angles[Motor6]);
+            DMcontrol_motor_7(&hfdcan2,gripper_ctrl_mode);//夹爪控制
+        }
+        else if(dm_arm_feedback_pub_msg.arm_control_state == PC_based_Controller)//PC控制模式
+        {
+            for (int i = 0; i < 6; i++)
+            {
+                dm_pc_motor_angles[i] = dm_receive_pc_cmd_arm_msg_data.joint_pos[i] * 57.3f;
+            }
+            DMcontrol_motor_1(&hfdcan3, &motor_controls[Motor1], dm_pc_motor_angles[Motor1]);
+            DMcontrol_motor_2(&hfdcan3, &motor_controls[Motor2], dm_pc_motor_angles[Motor2]);
+            DMcontrol_motor_3(&hfdcan2, &motor_controls[Motor3], dm_pc_motor_angles[Motor3]);
+            DMcontrol_motor_4(&hfdcan2, &motor_controls[Motor4], dm_pc_motor_angles[Motor4]);
+            DMcontrol_motor_5(&hfdcan2, &motor_controls[Motor5], dm_pc_motor_angles[Motor5]);
+            DMcontrol_motor_6(&hfdcan2, &motor_controls[Motor6], dm_pc_motor_angles[Motor6]);
+            DMcontrol_motor_7(&hfdcan2,dm_receive_pc_cmd_arm_msg_data.gripper_ctrl);//夹爪控制
+            if(dm_receive_pc_cmd_arm_msg_data.pc_ctrl_process_state == 6 && pc_ctrl_process_last_state != 6)//完成第一个步骤
+            {
+                auto_ctrl_mode = AUTO_WAIT;
+            }
+            pc_ctrl_process_last_state = dm_receive_pc_cmd_arm_msg_data.pc_ctrl_process_state;
+        }
+        else if(dm_arm_feedback_pub_msg.arm_control_state == MCU_based_Controller)
+        {
             if (dmmotor_subscribe_movej_ref_data.seq != dmmotor_last_movej_seq)
             {
                 dmmotor_last_movej_seq = dmmotor_subscribe_movej_ref_data.seq;
@@ -491,7 +503,7 @@ void DMmotorTask_Entry(void const * argument)
                 }
             }
             DMcontrol_motor_7(&hfdcan2, mcu_gripper_state);//夹爪控制//一键夹取功能
-//        }
+        }
 
 /* -------------------------------- 线程代码编写段落 ------------------------------- */
 
