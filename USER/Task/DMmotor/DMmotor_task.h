@@ -47,7 +47,6 @@ void arm_cmd_disable(void);
 typedef struct {
     float motor_min_limit;       // 电机最小角度限制
     float motor_max_limit;       // 电机最大角度限制
-    float initial_offset_rad;        // 电机的初始偏差（弧度）
 
     float current_angle_rad;            // 电机的齿轮比
     float last_angle_rad;            // 电机上一次的角度（弧度）

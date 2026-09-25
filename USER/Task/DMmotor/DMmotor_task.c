@@ -367,7 +367,6 @@ void DMmotorTask_Entry(void const * argument)
     for (int i = 0; i < 6; i++) {
         motor_controls[i].current_angle_rad = 0.0f;
         motor_controls[i].last_angle_rad = 0.0f;
-        motor_controls[i].initial_offset_rad = 0.0f;
         motor_controls[i].calibrated = 0;
     }
 
@@ -604,12 +603,10 @@ void DMcontrol_motor_1(hcan_t* hcan, DMmotorControl* motor_control, float target
     {
         if(dm_user_motor_angles[Motor1] != 0 )
         {
-            motor_control->initial_offset_rad = DEG_TO_RAD(dm_user_motor_angles[Motor1]);
             motor_control->calibrated = 1;
         }
         else if(dm_pc_motor_angles[Motor1] != 0 )
         {
-            motor_control->initial_offset_rad = DEG_TO_RAD(dm_pc_motor_angles[Motor1]);
             motor_control->calibrated = 1;
         }
     }
@@ -627,10 +624,8 @@ void DMcontrol_motor_1(hcan_t* hcan, DMmotorControl* motor_control, float target
 void DMcontrol_motor_2(hcan_t* hcan, DMmotorControl* motor_control, float target_angle) {
     if (!motor_control->calibrated) {
         if (dm_user_motor_angles[Motor2] != 0) {
-            motor_control->initial_offset_rad = DEG_TO_RAD(dm_user_motor_angles[Motor2]);
             motor_control->calibrated = 1;
         } else if (dm_pc_motor_angles[Motor2] != 0) {
-            motor_control->initial_offset_rad = DEG_TO_RAD(dm_pc_motor_angles[Motor2]);
             motor_control->calibrated = 1;
         }
     } else if (motor_control->calibrated == 1) {
@@ -644,10 +639,8 @@ void DMcontrol_motor_2(hcan_t* hcan, DMmotorControl* motor_control, float target
 void DMcontrol_motor_3(hcan_t* hcan, DMmotorControl* motor_control, float target_angle) {
     if (!motor_control->calibrated) {
         if (dm_user_motor_angles[Motor3] != 0) {
-            motor_control->initial_offset_rad = DEG_TO_RAD(dm_user_motor_angles[Motor3]);
             motor_control->calibrated = 1;
         } else if (dm_pc_motor_angles[Motor3] != 0) {
-            motor_control->initial_offset_rad = DEG_TO_RAD(dm_pc_motor_angles[Motor3]);
             motor_control->calibrated = 1;
         }
     } else if (motor_control->calibrated == 1) {
@@ -661,10 +654,8 @@ void DMcontrol_motor_3(hcan_t* hcan, DMmotorControl* motor_control, float target
 void DMcontrol_motor_4(hcan_t* hcan, DMmotorControl* motor_control, float target_angle) {
     if (!motor_control->calibrated) {
         if (dm_user_motor_angles[Motor4] != 0) {
-            motor_control->initial_offset_rad = DEG_TO_RAD(dm_user_motor_angles[Motor4]);
             motor_control->calibrated = 1;
         } else if (dm_pc_motor_angles[Motor4] != 0) {
-            motor_control->initial_offset_rad = DEG_TO_RAD(dm_pc_motor_angles[Motor4]);
             motor_control->calibrated = 1;
         }
     } else if (motor_control->calibrated == 1) {
@@ -678,10 +669,8 @@ void DMcontrol_motor_4(hcan_t* hcan, DMmotorControl* motor_control, float target
 void DMcontrol_motor_5(hcan_t* hcan, DMmotorControl* motor_control, float target_angle) {
     if (!motor_control->calibrated) {
         if (dm_user_motor_angles[Motor5] != 0) {
-            motor_control->initial_offset_rad = DEG_TO_RAD(dm_user_motor_angles[Motor5]);
             motor_control->calibrated = 1;
         } else if (dm_pc_motor_angles[Motor5] != 0) {
-            motor_control->initial_offset_rad = DEG_TO_RAD(dm_pc_motor_angles[Motor5]);
             motor_control->calibrated = 1;
         }
     } else if (motor_control->calibrated == 1) {
@@ -695,10 +684,8 @@ void DMcontrol_motor_5(hcan_t* hcan, DMmotorControl* motor_control, float target
 void DMcontrol_motor_6(hcan_t* hcan, DMmotorControl* motor_control, float target_angle) {
     if (!motor_control->calibrated) {
         if (dm_user_motor_angles[Motor6] != 0) {
-            motor_control->initial_offset_rad = DEG_TO_RAD(dm_user_motor_angles[Motor6]);
             motor_control->calibrated = 1;
         } else if (dm_pc_motor_angles[Motor6] != 0) {
-            motor_control->initial_offset_rad = DEG_TO_RAD(dm_pc_motor_angles[Motor6]);
             motor_control->calibrated = 1;
         }
     } else if (motor_control->calibrated == 1) {
