@@ -81,7 +81,15 @@ volatile float g_man_yaw = -3.1415f;
 volatile float g_man_pitch = -1.57f;
 volatile uint8_t g_man_trigger = 0;
 
-Gripper_mode_e MCU_gripper_ctrl;
+/* 2026-10-10: chu zhi you [ling chu shi hua](= Gripper_OPEN) gai cheng xian shi Gripper_FREE.
+ *   yuan yin: zhe ge bian liang mei ge zhou qi dou bei pub_push_msg() tui gei
+ *   "MCU_gripper_ctrl_mode" hua ti (ben wen jian :739), er shou fei zhe
+ *   DMmotor_task.c:612 ba ta du jin mcu_gripper_state, zai MCU dang xia hui bei dang
+ *   cheng yi tiao zhen shi ming ling. ling chu shi hua = 0 = Gripper_OPEN
+ *   => shang dian jiu xiang jia zhua fa +100, jia zhua zi ji pao dao quan kai wei.
+ *   FREE = mei you ming ling => PSI ling zhuang tai (bu chu li / ke zi you ban).
+ *   xiang qing jian Task/Cmd/cmd_task.h de mei ju zhu shi. */
+Gripper_mode_e MCU_gripper_ctrl = Gripper_FREE;
 
 // 手动序列激活标志
 static volatile uint8_t g_manual_seq_active = 0;

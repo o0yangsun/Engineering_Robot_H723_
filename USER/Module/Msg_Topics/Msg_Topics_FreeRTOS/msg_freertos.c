@@ -37,7 +37,7 @@ static uint8_t check_topic_name(char *name){
  * @param len  消息类型长度,通过sizeof()获取
  * @return publisher_t* 返回发布者实例
  */
-publisher_t *pub_register(char *name, uint8_t len){
+static publisher_t *pub_register_inner(char *name, uint8_t len){
     uint8_t check_num = check_topic_name(name);
     publisher_t *pub = (publisher_t *)pvPortMalloc(sizeof(publisher_t));
 
@@ -84,6 +84,21 @@ publisher_t *pub_register(char *name, uint8_t len){
     return pub;
 }
 
+/* [2026-10-11 FIX] Keep the whole "lookup + create + register" sequence atomic.
+ * Two tasks may register the same topic name concurrently (cmd_task and
+ * DMmotor_task both register "dm_arm_ctrl_mode"); without this lock the
+ * loser can leave a half-initialised topic_obj (sem == NULL), which later
+ * trips configASSERT inside xQueueSemaphoreTake and freezes the whole system
+ * (it runs with interrupts masked, so nothing can recover).
+ * pvPortMalloc / xSemaphoreCreateBinaryStatic never block => safe here. */
+publisher_t *pub_register(char *name, uint8_t len){
+    publisher_t *p;
+    taskENTER_CRITICAL();
+    p = pub_register_inner(name, len);
+    taskEXIT_CRITICAL();
+    return p;
+}
+
 /**
  * @brief 订阅name的话题消息
  *
@@ -106,6 +121,9 @@ subscriber_t *sub_register(char *name, uint8_t len){
  * @return uint8_t 返回值为0说明发布失败,为1说明发布成功
  */
 uint8_t pub_push_msg(publisher_t *pub, void *data){
+    /* [2026-10-11 FIX] Defence in depth: a half-initialised topic must never
+     * take the whole system down through configASSERT. */
+    if(pub == NULL || pub->tp == NULL || pub->tp->sem == NULL) return 0;
     /* 关中断保护（可选） */
 //    rt_base_t level;
 //    level = rt_hw_interrupt_disable();

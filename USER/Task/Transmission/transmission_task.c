@@ -21,7 +21,12 @@
 #include "usbd_cdc_if.h"
 #include "cmd_task.h"
 
-#define MAX_USB_BUF_LEN     60
+/* 2026-10-08: 60 -> 80。
+ *   原值 60 对当前 0x20 帧(4+51+2 = 57)只剩 3 字节余量;
+ *   本批要给上行数据段加夹爪位置+夹爪力矩共 8 字节, 帧长变 65;
+ *   用 60 会越界写(usb_txbuffer 是同文件级 static, 越界会踩到 Rx_data/Data_len 等,
+ *   症状是上行正常、下行解析偶发错乱, 极难查)。留到 80 给后续扩展余量。 */
+#define MAX_USB_BUF_LEN     80
 #define HEAD_BUF_LEN        4       // 帧头长度（0-3字节:帧头0xFF、地址、命名ID、数据长度）
 #define CRC_BUF_LEN         2       // 帧头长度（0-3字节:帧头0xFF、地址、命名ID、数据长度）
 
@@ -31,10 +36,20 @@
 #define USB_CMD_CHASSIS_DATA_LEN    12      // 数据部分长度（3个int32_t）
 #define CMD_CHASSIS_BUF_LEN         (USB_CMD_CHASSIS_DATA_LEN+HEAD_BUF_LEN+CRC_BUF_LEN)      // 总长度：4(帧头)+12(数据)+2(校验)
 
-#define USB_ARM_JOINTS_DATA_LEN    51      // 数据部分长度（12个int32_t+3个uint8_t）
+#define USB_ARM_JOINTS_DATA_LEN    59      /* 数据部分长度
+     * 2026-10-09: 51 -> 59。原 51 = 6*4(位置) + 6*4(速度) + 3(夹爪状态/常量1/auto)。
+     * 本批追加【夹爪实测位置 + 夹爪实测力矩】共 8 字节(2 个 int32)，
+     * 追加在数据段【末尾】(偏移 51..58)，原有字段偏移一律不变。
+     * 帧长 4+59+2 = 65 <= MAX_USB_BUF_LEN(80)。
+     * 注意：PC 侧 kernel 已同步改为【固定 6 关节 + 显式偏移 + 长度白名单】，
+     * 旧的 (dlen-3)//8 反推法在 dlen=59 时会算成 7 关节 -> 必须两侧同批更新。 */
+#define USB_ARM_JOINTS_GRIPPER_DATA_LEN    8
 #define USB_ARM_JOINTS_POS_DATA_LEN    24
 #define USB_ARM_JOINTS_VEL_DATA_LEN    24
-#define ARM_JOINTS_BUF_LEN         (USB_ARM_JOINTS_DATA_LEN+HEAD_BUF_LEN+CRC_BUF_LEN)      // 总长度：4(帧头)+49(数据)+2(校验)
+
+/* 0x21 下行数据段长度: 6*4(目标角) + 1(夹爪力矩指令) + 1(control_state) + 1(process_state) = 27 */
+#define USB_ARM_CMD_DATA_LEN    27
+#define ARM_JOINTS_BUF_LEN         (USB_ARM_JOINTS_DATA_LEN+HEAD_BUF_LEN+CRC_BUF_LEN)      // 总长度：4(帧头)+59(数据)+2(校验)
 
 #define USB_VOICE_CONTROL_LEN    24
 #define VOICE_CONTROL_BUF_LEN         (HEAD_BUF_LEN+USB_VOICE_CONTROL_LEN+CRC_BUF_LEN)      // ??????4(??)+24(????)+2(У??)
@@ -69,6 +84,9 @@ static uint8_t Data_len = 0;
 static uint32_t num_count = 0;
 static uint32_t sum_check = 0;
 static uint32_t addr_check = 0;
+
+/* 0x21 长度不符被拒的次数(正常应恒为 0), 供 GDB/RTT 观察 */
+uint32_t arm_cmd_len_bad_cnt = 0;
 
 
 static void transmission_topic_pub_init(void);
@@ -207,7 +225,9 @@ void uppack_pc_cmd_arm_data(void)
                                                        (Rx_data[25] << 8) |  // byte2占 23-16位
                                                        (Rx_data[26] << 16)  |  // byte1占 15-8位
                                                        (Rx_data[27] << 24)) /10000.0f;    // byte0占 7-0位
-    receive_pc_cmd_arm_msg_data.gripper_ctrl = (Rx_data[28] << 0) ;
+    /* 2026-10-09: 改成【有符号】读取 —— 夹爪字段现在是归一化力矩指令 -100..+100。
+     *   必须显式转 int8_t: 直接写 Rx_data[28] 是 uint8_t, 200 会读成 +200 而不是 -56。 */
+    receive_pc_cmd_arm_msg_data.gripper_torque_cmd = (int8_t)Rx_data[28];
     receive_pc_cmd_arm_msg_data.control_state = (Rx_data[29] << 0);
     receive_pc_cmd_arm_msg_data.pc_ctrl_process_state = (int8_t)(Rx_data[30] << 0);
 }
@@ -388,7 +408,21 @@ void UnpackPCData(void)
                 }
                 else if(Rx_data[2] == 0x21)//机械臂数据包
                 {
-                    uppack_pc_cmd_arm_data();
+                    /* 2026-10-09 长度校验: Rx_data[3] 是发送方自报的 LEN, 必须与固件期望一致。
+                     *   动机: uppack_pc_cmd_arm_data() 用【固定下标 4..30】解析, 长度不符时
+                     *   会读到 Rx_data 里【上一帧的残留字节】(memset 每次 UnpackPCData 只做一次),
+                     *   静默把垃圾当成夹爪力矩指令 —— 无报错、无计数、极难查。
+                     *   现在长度不等于 USB_ARM_CMD_DATA_LEN 直接拒收并计数;
+                     *   将来若把夹爪并入第 7 个 int32(LEN=31), 请同步改那个宏。
+                     *   用【精确等于】而不是【不小于】: 否则新帧会被放行却按旧偏移解析。 */
+                    if (Rx_data[3] != USB_ARM_CMD_DATA_LEN)
+                    {
+                        arm_cmd_len_bad_cnt++;
+                    }
+                    else
+                    {
+                        uppack_pc_cmd_arm_data();
+                    }
                 }
                 else if(Rx_data[2] == 0x38)
                 {
@@ -462,6 +496,18 @@ void ArmJointDataPack(void) {
     memcpy(&usb_txbuffer[HEAD_BUF_LEN + USB_ARM_JOINTS_POS_DATA_LEN + USB_ARM_JOINTS_VEL_DATA_LEN ], &transmission_subscribe_arm_feedback_data.gripper_state, sizeof(int8_t));
     usb_txbuffer[HEAD_BUF_LEN + USB_ARM_JOINTS_POS_DATA_LEN + USB_ARM_JOINTS_VEL_DATA_LEN + sizeof(int8_t) ] = 1; //不为1的话上位机不能初始化成功，所以强制发送0，目前不影响正常车的运动
     memcpy(&usb_txbuffer[HEAD_BUF_LEN + USB_ARM_JOINTS_POS_DATA_LEN + USB_ARM_JOINTS_VEL_DATA_LEN + 2 * sizeof(int8_t) ], &transmission_subscribe_arm_feedback_data.auto_ctrl_mode, sizeof(int8_t));
+
+    /* 2026-10-09 新增：夹爪实测位置 + 实测力矩（评审 P2-5）。
+     *   放在数据段【末尾】(偏移 51 / 55)，原有字段偏移不变。
+     *   单位与 1~6 关节一致：位置 rad×10000、力矩 N·m×10000，int32 小端。
+     *   用 DATA_LEN - GRIPPER_DATA_LEN 定位，改长度时不会错位。 */
+    {
+        int32_t gripper_pos_wire = (int32_t)(transmission_subscribe_arm_feedback_data.gripper_pos_rad * 10000.0f);
+        int32_t gripper_tor_wire = (int32_t)(transmission_subscribe_arm_feedback_data.gripper_tor_nm * 10000.0f);
+        uint8_t *g_base = &usb_txbuffer[HEAD_BUF_LEN + USB_ARM_JOINTS_DATA_LEN - USB_ARM_JOINTS_GRIPPER_DATA_LEN];
+        memcpy(g_base, &gripper_pos_wire, sizeof(int32_t));
+        memcpy(g_base + sizeof(int32_t), &gripper_tor_wire, sizeof(int32_t));
+    }
     // 计算校验码（覆盖0到最后一个数据字节）
     sum_check = 0;
     addr_check = 0;

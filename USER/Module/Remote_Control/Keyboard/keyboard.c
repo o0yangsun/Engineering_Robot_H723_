@@ -52,7 +52,10 @@ static float base_delta_w = MAX_CHASSIS_VW_SPEED  / KEY_ACC_TIME;
 #define MICRO_DECAY           0.95f   // 微调模式衰减系数
 #define DEAD_ZONE             5.0f    // 速度死区(mm/s)
 
-Gripper_mode_e gripper_ctrl_mode;
+/* ★ 2026-10-10：初值由"零初始化"(= Gripper_OPEN) 改成显式 Gripper_FREE。
+ *   否则上电瞬间这个变量就等于"命令张开"，配合最上档的持续下发会让夹爪一上电自己跑。
+ *   FREE = 没有命令 ⇒ 车端零状态。第一次按键盘 X/Z 或拨动拨杆后才变成 OPEN/CLOSE。 */
+Gripper_mode_e gripper_ctrl_mode = Gripper_FREE;
 // 全局键盘控制对象定义
 keyboard_control_t keyboard = {
         .vx = 0, .vy = 0, .vw = 0,

@@ -96,7 +96,9 @@ void DMcontrol_motor_5(hcan_t* hcan, DMmotorControl* motor_control, float target
 
 void DMcontrol_motor_6(hcan_t* hcan, DMmotorControl* motor_control, float target_angle);
 
-void DMcontrol_motor_7(hcan_t* hcan,Gripper_mode_e Gripper_ctrl);
+/* ★ 2026-10-09: 入参由 Gripper_mode_e(0/1 开关) 改成【归一化力矩指令 int8_t, -100..+100】。
+ *   见 DMmotor_task.c 里 DMcontrol_motor_7 的说明。 */
+void DMcontrol_motor_7(hcan_t* hcan, int8_t cmd);
 
 
 

@@ -64,7 +64,10 @@ static pc_control_t pc_data;
 static pc_control_t nuc_data;
 
 static Arm_mode_e dm_arm_ctrl_mode;
-static Gripper_mode_e gripper_ctrl_mode;
+/* ★ 2026-10-08 删除：这里曾另有一份同名的 file-static `gripper_ctrl_mode`。
+ *   它【不是】DMmotor_task.c 实际消费的那一份（那份是 keyboard.c:55 的全局，
+ *   声明见 cmd_task.h 的 extern）⇒ 拨杆写它等于没写。
+ *   历史症状：拨杆代码取消注释后夹爪纹丝不动，且无任何编译/运行告警。 */
 extern struct referee_fdb_msg referee_fdb;
 struct cmd_chassis_msg cmd_chassis;
 
@@ -206,13 +209,23 @@ void remote_to_cmd_sbus(void) {
         cmd_chassis.vw = (vt13_remote_parsed_data_fdb.ch[0] * CHASSIS_VT13_RC_MOVE_RATIO_W / VT13_RC_MAX_VALUE
                           + keyboard.vw * CHASSIS_PC_MOVE_RATIO_W +receive_pc_cmd_voice_control_data.vw + nuc_keyboard.vw * CHASSIS_PC_MOVE_RATIO_W);
 
+        /* ★ 2026-10-08 恢复：遥控器拨杆（VT13 mode_sw）控制夹爪。
+         *
+         * 【这里不加档位闸】——刻意为之，别"顺手"补上：
+         *   `dm_arm_ctrl_mode` 只在下面 SBUS 分支里被赋值，本分支从不更新它，
+         *   所以在这里读它拿到的是【上一次的值】（可能僵死在 PC_based_Controller）。
+         *   拿它当闸 ⇒ 拨杆会莫名其妙失效。
+         * 「PC 档下拨杆控不了夹爪」由【消费侧】保证：
+         *   DMmotor_task.c:472 只在 User_defined 分支读 gripper_ctrl_mode，
+         *   PC 档读的是 0x21 的 Rx_data[28]，与本变量无关。
+         * 写的是 keyboard.c:55 定义的【全局】gripper_ctrl_mode（声明见 cmd_task.h）。 */
         if (vt13_remote_parsed_data_fdb.mode_sw == 0)//夹爪控制模式
         {
-            gripper_ctrl_mode =Gripper_OPEN ;
+            gripper_ctrl_mode = Gripper_OPEN;
         }
-        else if(vt13_remote_parsed_data_fdb.mode_sw == 2)
+        else if (vt13_remote_parsed_data_fdb.mode_sw == 2)
         {
-            gripper_ctrl_mode =Gripper_CLOSE;
+            gripper_ctrl_mode = Gripper_CLOSE;
         }
         //底盘失使能
         if(vt13_remote_parsed_data_fdb.fn_1 && !fn_1_last_state)
@@ -242,6 +255,8 @@ void remote_to_cmd_sbus(void) {
         cmd_chassis.vw = (sbus_data_fdb.ch1 * CHASSIS_RC_MOVE_RATIO_W / RC_MAX_VALUE
                           + keyboard.vw * CHASSIS_PC_MOVE_RATIO_W +receive_pc_cmd_voice_control_data.vw + pc_cmd_data.vw + nuc_keyboard.vw * CHASSIS_PC_MOVE_RATIO_W);
         // 原SBUS遥控器泵模式控制（保持原有逻辑）
+        /* ★ 2026-10-08 恢复：SBUS 遥控器拨杆（sw4）控制夹爪。
+         * 原代码本来就带 User_defined 档位闸，恢复即可。 */
         if(dm_arm_ctrl_mode == User_defined_Controller)
         {
             if (sbus_data_fdb.sw4 == RC_UP) {

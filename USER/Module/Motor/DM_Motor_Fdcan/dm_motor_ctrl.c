@@ -115,11 +115,17 @@ void dm_motor_init(void)
     motor[Motor7].id = 0x07;
     motor[Motor7].mst_id = 0x17;
     motor[Motor7].tmp.read_flag = 1;
+    /* 2026-10-11: psi_mode -> mit_mode（台架实测：这台 DM4310 的 PVT/PSI 环路【发散】，
+     *   MIT 是唯一可靠模式；且 MIT 是出厂默认 RID10=1，无需用达妙助手改 EEPROM）。
+     *   === 注意 === 若该电机的 RID10 被改成 2/4，MIT 帧会被【静默忽略】
+     *   （现象：夹爪纹丝不动、没有任何报错），上实机前用达妙助手读一遍确认。
+     *   实现见 USER/Task/DMmotor/gripper_force.c。 */
     motor[Motor7].ctrl.mode = mit_mode;
     motor[Motor7].ctrl.vel_set = 0.0f;
     motor[Motor7].ctrl.pos_set = 0.0f;
-    motor[Motor7].ctrl.kp_set = 0.0f;
+    motor[Motor7].ctrl.kp_set = 0.0f;   /* 零刚度：gripper_force_init() 会在使能前重设 */
     motor[Motor7].ctrl.kd_set = 0.0f;
+    motor[Motor7].ctrl.tor_set = 0.0f;
     motor[Motor7].tmp.PMAX = 12.5f;
     motor[Motor7].tmp.VMAX = 10.0f;
     motor[Motor7].tmp.TMAX = 10.0f;

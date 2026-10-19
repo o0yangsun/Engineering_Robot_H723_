@@ -86,6 +86,12 @@ typedef struct
     uint32_t update_mask;      // 哪些电机本周期更新过
     uint32_t tick_ms;          // 时间戳，可选
     dm_joint_feedback_t joint[6];   // 0~5 对应关节1~6
+    /* 2026-10-09 新增：夹爪实测位置(rad) / 实测力矩(N·m)。
+     *   供 0x20 上行回传用（评审 P2-5）；
+     *   刻意【不】走 1~6 关节那套中值滤波+死区 —— 夹爪是力控器件，
+     *   滤波会掩盖接触瞬间的力矩变化。 */
+    float gripper_pos_rad;
+    float gripper_tor_nm;
     Gripper_mode_e gripper_state;
     Arm_mode_e arm_control_state;
     Auto_ctrl_mode auto_ctrl_mode;
